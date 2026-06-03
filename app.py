@@ -56,7 +56,7 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
-            # --- SPECIAL RULES FOR SCENARIO BETA (INSTAGRAM) ---
+            # --- FIXED SPECIAL RULES FOR SCENARIO BETA (INSTAGRAM INTAKE) ---
             if active_sc == "Scenario Beta":
                 st.markdown("#### 📸 Instagram Profile Intake")
                 new_ig_handle = st.text_input("Add New Instagram Handle (e.g., @cristiano):", key="ig_intake_box")
@@ -64,8 +64,9 @@ for index, tab_object in enumerate(tabs):
                 if st.button("Register Profile Node", use_container_width=True):
                     cleaned_handle = new_ig_handle.strip().replace("@", "")
                     if cleaned_handle and cleaned_handle not in st.session_state[f"people_{active_sc}"]:
+                        # Safely commit to state tracking arrays before forcing the layout rerun
                         st.session_state[f"people_{active_sc}"].append(cleaned_handle)
-                        st.success(f"Registered node for @{cleaned_handle}!")
+                        st.session_state[f"friends_{active_sc}"][cleaned_handle] = ""
                         st.rerun()
                 st.markdown("---")
 
@@ -75,9 +76,9 @@ for index, tab_object in enumerate(tabs):
 
             for person in current_people:
                 current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
-                box_label = f"Mutual connections of @{person}:" if active_sc == "Scenario Beta" else f"Friends of {person}:"
+                box_label = f"Mutual connections of @{person}" if active_sc == "Scenario Beta" else f"Friends of {person}"
                 
-                user_input = st.text_input(box_label, value=current_val, key=f"input_{active_sc}_{person}")
+                user_input = st.text_input(f"🔗 {box_label}:", value=current_val, key=f"input_{active_sc}_{person}")
                 st.session_state[f"friends_{active_sc}"][person] = user_input
                 
                 friends_list = [f.strip().replace("@", "") for f in user_input.split(",") if f.strip()]
@@ -88,6 +89,7 @@ for index, tab_object in enumerate(tabs):
             if newly_discovered_friends:
                 for fresh_friend in newly_discovered_friends:
                     st.session_state[f"people_{active_sc}"].append(fresh_friend)
+                    st.session_state[f"friends_{active_sc}"][fresh_friend] = ""
                 st.rerun()
 
             # --- AUTO-PRUNING ENGINE ---
@@ -114,7 +116,10 @@ for index, tab_object in enumerate(tabs):
                 for friend in friends_list:
                     if G_active.has_node(person) and G_active.has_node(friend): G_active.add_edge(person, friend)
 
-            pos_active = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
+            if len(G_active.nodes()) > 0:
+                pos_active = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
+            else:
+                pos_active = {}
 
             # --- PATHFINDING TRACE LOGIC ---
             shortest_path_nodes = []
@@ -180,11 +185,12 @@ for index, tab_object in enumerate(tabs):
                     custom_sizes.append(node_size_global)
                     border_colors.append("#FFFFFF")
 
-            node_trace = go.Scatter3d(
-                x=node_x, y=node_y, z=node_z, mode='markers', hovertext=node_text, hoverinfo='text',
-                marker=dict(showscale=True, colorscale=color_theme, color=node_colors, size=custom_sizes, line=dict(width=1.5, color=border_colors))
-            )
-            data_traces.append(node_trace)
+            if node_x:
+                node_trace = go.Scatter3d(
+                    x=node_x, y=node_y, z=node_z, mode='markers', hovertext=node_text, hoverinfo='text',
+                    marker=dict(showscale=True, colorscale=color_theme, color=node_colors, size=custom_sizes, line=dict(width=1.5, color=border_colors))
+                )
+                data_traces.append(node_trace)
 
             layout_active = go.Layout(
                 height=800, showlegend=False,
@@ -197,7 +203,7 @@ for index, tab_object in enumerate(tabs):
             fig_active = go.Figure(data=data_traces, layout=layout_active)
             st.plotly_chart(fig_active, use_container_width=True, key=f"chart_{active_sc}")
             
-            # FIXED INSTAGRAM DIRECT-LINK GENERATOR BLOCK HERE
+            # Instagram Direct-Link Buttons
             if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
                 st.markdown("### 📸 Open Profiles in Instagram")
                 cols = st.columns(min(len(G_active.nodes()) - 1, 5))
