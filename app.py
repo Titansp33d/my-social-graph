@@ -12,13 +12,12 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
-* **Persistence Active:** Any changes you make are instantly saved to disk and will reload when you return.
-* **Bulk Import:** Paste a list of Instagram handles or copied text to automate your network creation.
+* **Persistence Active:** Changes are automatically saved to `network_data.json`.
+* **Bulk Importers Everywhere:** Use the global importer to add followers to Jinan, or use the mini-importers under individual profiles to rapidly map mutual connections!
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
 def load_persisted_data():
-    """Loads saved graph network data from the JSON file if it exists."""
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
@@ -28,10 +27,7 @@ def load_persisted_data():
     return None
 
 def save_persisted_data():
-    """Saves current session state graph structures cleanly to disk."""
-    data_to_save = {
-        "scenarios": {}
-    }
+    data_to_save = {"scenarios": {}}
     for sc in ["Scenario Alpha", "Scenario Beta", "Scenario Gamma"]:
         data_to_save["scenarios"][sc] = {
             "people": st.session_state.get(f"people_{sc}", ["Jinan"]),
@@ -97,14 +93,12 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
-            # --- SCENARIO BETA: AUTOMATED BULK IMPORT ENGINE ---
+            # --- SCENARIO BETA: GLOBAL BASE BULK IMPORT ENGINE (FOR JINAN) ---
             if active_sc == "Scenario Beta":
-                st.markdown("#### 🚀 Bulk Instagram Importer")
-                st.caption("Paste follower list text or raw comma-separated handles below:")
-                bulk_input = st.text_area("Paste Handles here:", height=100, key="bulk_import_area")
+                st.markdown("#### 🚀 Global Instagram Importer (Add your main followers)")
+                bulk_input = st.text_area("Paste raw text list here:", height=90, key="global_bulk_import_area")
                 
-                if st.button("Automate Bulk Population", use_container_width=True):
-                    # Parse out commas, spaces, line breaks, and strip out '@' signs
+                if st.button("Automate Main Population", use_container_width=True):
                     raw_tokens = bulk_input.replace("\n", ",").replace(" ", ",").split(",")
                     parsed_handles = []
                     for token in raw_tokens:
@@ -113,7 +107,6 @@ for index, tab_object in enumerate(tabs):
                             parsed_handles.append(clean)
                     
                     if parsed_handles:
-                        # Automatically hook them all up to Jinan to prevent the prune engine from deleting them
                         current_jinan_connections = st.session_state[f"friends_{active_sc}"].get("Jinan", "")
                         existing_list = [f.strip() for f in current_jinan_connections.split(",") if f.strip()]
                         
@@ -130,7 +123,7 @@ for index, tab_object in enumerate(tabs):
                         st.rerun()
                 st.markdown("---")
 
-            # --- DYNAMIC RELATIONSHIP BOX GENERATION ---
+            # --- DYNAMIC RELATIONSHIP BOX GENERATION + LOCAL MINI BULK IMPORTERS ---
             current_people = list(st.session_state[f"people_{active_sc}"])
             state_mutated = False
 
@@ -138,14 +131,38 @@ for index, tab_object in enumerate(tabs):
                 current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
                 box_label = f"Mutual connections of @{person}" if active_sc == "Scenario Beta" else f"Friends of {person}"
                 
+                # Standard Text Entry Field
                 user_input = st.text_input(f"🔗 {box_label}:", value=current_val, key=f"input_{active_sc}_{person}")
                 
-                # If data changes, update state and commit to disk
                 if user_input != current_val:
                     st.session_state[f"friends_{active_sc}"][person] = user_input
                     state_mutated = True
                 
-                friends_list = [f.strip().replace("@", "") for f in user_input.split(",") if f.strip()]
+                # Local Mini Bulk Text Area Expanesion for EVERY profile field
+                with st.expander(f"📋 Bulk Text Importer for {person}", expanded=False):
+                    local_bulk_input = st.text_area("Paste copied text list for this individual here:", height=80, key=f"bulk_local_{active_sc}_{person}")
+                    if st.button("Process & Link Mutuals", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
+                        raw_tokens = local_bulk_input.replace("\n", ",").replace(" ", ",").split(",")
+                        local_parsed = []
+                        for token in raw_tokens:
+                            clean = token.strip().replace("@", "")
+                            if clean and clean not in local_parsed:
+                                local_parsed.append(clean)
+                        
+                        if local_parsed:
+                            existing_list = [f.strip() for f in current_val.split(",") if f.strip()]
+                            for handle in local_parsed:
+                                if handle not in st.session_state[f"people_{active_sc}"]:
+                                    st.session_state[f"people_{active_sc}"].append(handle)
+                                    st.session_state[f"friends_{active_sc}"][handle] = ""
+                                if handle not in existing_list and handle != person:
+                                    existing_list.append(handle)
+                            
+                            st.session_state[f"friends_{active_sc}"][person] = ", ".join(existing_list)
+                            state_mutated = True
+                
+                # Update loop for standard nodes
+                friends_list = [f.strip().replace("@", "") for f in st.session_state[f"friends_{active_sc}"][person].split(",") if f.strip()]
                 for friend in friends_list:
                     if friend not in st.session_state[f"people_{active_sc}"]:
                         st.session_state[f"people_{active_sc}"].append(friend)
