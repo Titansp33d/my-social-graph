@@ -8,7 +8,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario 3D Social Constellation Suite")
 st.markdown("""
 * **Scenario Alpha & Gamma:** Standard custom name mapping.
-* **Scenario Beta:** Upgraded to target public Instagram profiles with live profile viewer links!
+* **Scenario Beta:** Upgraded to target public Instagram profiles with direct native app routing!
 """)
 
 # --- STREAMLIT SESSION STATE MEMORY STORAGE (ISOLATED BY SCENARIO) ---
@@ -75,8 +75,6 @@ for index, tab_object in enumerate(tabs):
 
             for person in current_people:
                 current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
-                
-                # Dynamic labeling adjustments for Instagram context
                 box_label = f"Mutual connections of @{person}:" if active_sc == "Scenario Beta" else f"Friends of {person}:"
                 
                 user_input = st.text_input(box_label, value=current_val, key=f"input_{active_sc}_{person}")
@@ -167,9 +165,8 @@ for index, tab_object in enumerate(tabs):
                 deg = G_active.degree(node)
                 node_colors.append(deg)
                 
-                # Custom hovercards featuring quick public web links to Instagram profiles
                 if active_sc == "Scenario Beta" and node != "Jinan":
-                    node_text.append(f"<b>IG Handle:</b> @{node}<br><b>Connections:</b> {deg}<br>🔗 <i>Click marker to view public feed on dumpoir.com/{node}</i>")
+                    node_text.append(f"<b>IG Handle:</b> @{node}<br><b>Connections:</b> {deg}<br>🔗 <i>Click button below to open profile</i>")
                 else:
                     node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}")
                 
@@ -198,20 +195,15 @@ for index, tab_object in enumerate(tabs):
             )
             
             fig_active = go.Figure(data=data_traces, layout=layout_active)
-            
-            # Instagram-specific click behavior using custom Plotly JS execution injection
-            if active_sc == "Scenario Beta":
-                fig_active.update_layout(clickmode='event+select')
-            
             st.plotly_chart(fig_active, use_container_width=True, key=f"chart_{active_sc}")
             
-            # Extra helpful web links directly under the chart view for Scenario Beta
+            # FIXED INSTAGRAM DIRECT-LINK GENERATOR BLOCK HERE
             if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
-                st.markdown("### 🌐 Quick Web Viewers")
+                st.markdown("### 📸 Open Profiles in Instagram")
                 cols = st.columns(min(len(G_active.nodes()) - 1, 5))
                 c_idx = 0
                 for n in G_active.nodes():
                     if n != "Jinan":
                         with cols[c_idx % len(cols)]:
-                            st.link_button(f"👀 @{n}", f"https://www.dumpoir.com/v/{n}", use_container_width=True)
+                            st.link_button(f"📸 @{n}", f"https://www.instagram.com/{n}", use_container_width=True)
                         c_idx += 1
