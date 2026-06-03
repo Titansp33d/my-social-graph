@@ -1,24 +1,64 @@
 import streamlit as st
 import networkx as nx
 import plotly.graph_objects as go
+import json
+import os
 
-# Set up page configuration for maximum workspace deployment
+# Define the persistent storage file path
+SAVE_FILE = "network_data.json"
+
+# Set up page configuration
 st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 
-st.title("🛰️ Multi-Scenario 3D Social Constellation Suite")
+st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
-* **Scenario Alpha & Gamma:** Standard custom name mapping.
-* **Scenario Beta:** Upgraded to target public Instagram profiles with direct native app routing!
+* **Persistence Active:** Any changes you make are instantly saved to disk and will reload when you return.
+* **Bulk Import:** Paste a list of Instagram handles or copied text to automate your network creation.
 """)
 
-# --- STREAMLIT SESSION STATE MEMORY STORAGE (ISOLATED BY SCENARIO) ---
+# --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
+def load_persisted_data():
+    """Loads saved graph network data from the JSON file if it exists."""
+    if os.path.exists(SAVE_FILE):
+        try:
+            with open(SAVE_FILE, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            st.sidebar.error(f"Error loading saved data: {e}")
+    return None
+
+def save_persisted_data():
+    """Saves current session state graph structures cleanly to disk."""
+    data_to_save = {
+        "scenarios": {}
+    }
+    for sc in ["Scenario Alpha", "Scenario Beta", "Scenario Gamma"]:
+        data_to_save["scenarios"][sc] = {
+            "people": st.session_state.get(f"people_{sc}", ["Jinan"]),
+            "friends": st.session_state.get(f"friends_{sc}", {"Jinan": ""})
+        }
+    try:
+        with open(SAVE_FILE, "w") as f:
+            json.dump(data_to_save, f, indent=4)
+    except Exception as e:
+        st.sidebar.error(f"Failed to auto-save to disk: {e}")
+
+# --- INITIALIZE OR RESTORE MEMORY ---
+saved_data = load_persisted_data()
 scenarios = ["Scenario Alpha", "Scenario Beta", "Scenario Gamma"]
 
 for sc in scenarios:
     if f"people_{sc}" not in st.session_state:
-        st.session_state[f"people_{sc}"] = ["Jinan"]
+        if saved_data and sc in saved_data["scenarios"]:
+            st.session_state[f"people_{sc}"] = saved_data["scenarios"][sc]["people"]
+        else:
+            st.session_state[f"people_{sc}"] = ["Jinan"]
+            
     if f"friends_{sc}" not in st.session_state:
-        st.session_state[f"friends_{sc}"] = {"Jinan": ""}
+        if saved_data and sc in saved_data["scenarios"]:
+            st.session_state[f"friends_{sc}"] = saved_data["scenarios"][sc]["friends"]
+        else:
+            st.session_state[f"friends_{sc}"] = {"Jinan": ""}
 
 # --- GLOBAL VISUAL SYSTEM CONFIGURATION ---
 st.sidebar.header("🎨 Constellation Styling")
@@ -49,47 +89,71 @@ for index, tab_object in enumerate(tabs):
         with col_entry:
             st.markdown(f"### {active_sc} Registry")
             
-            if st.button(f"Clear Current Canvas", key=f"reset_{active_sc}", use_container_width=True):
+            if st.button(f"Reset & Clear This Canvas", key=f"clear_{active_sc}", use_container_width=True):
                 st.session_state[f"people_{active_sc}"] = ["Jinan"]
                 st.session_state[f"friends_{active_sc}"] = {"Jinan": ""}
+                save_persisted_data()
                 st.rerun()
                 
             st.markdown("---")
             
-            # --- FIXED SPECIAL RULES FOR SCENARIO BETA (INSTAGRAM INTAKE) ---
+            # --- SCENARIO BETA: AUTOMATED BULK IMPORT ENGINE ---
             if active_sc == "Scenario Beta":
-                st.markdown("#### 📸 Instagram Profile Intake")
-                new_ig_handle = st.text_input("Add New Instagram Handle (e.g., @cristiano):", key="ig_intake_box")
+                st.markdown("#### 🚀 Bulk Instagram Importer")
+                st.caption("Paste follower list text or raw comma-separated handles below:")
+                bulk_input = st.text_area("Paste Handles here:", height=100, key="bulk_import_area")
                 
-                if st.button("Register Profile Node", use_container_width=True):
-                    cleaned_handle = new_ig_handle.strip().replace("@", "")
-                    if cleaned_handle and cleaned_handle not in st.session_state[f"people_{active_sc}"]:
-                        # Safely commit to state tracking arrays before forcing the layout rerun
-                        st.session_state[f"people_{active_sc}"].append(cleaned_handle)
-                        st.session_state[f"friends_{active_sc}"][cleaned_handle] = ""
+                if st.button("Automate Bulk Population", use_container_width=True):
+                    # Parse out commas, spaces, line breaks, and strip out '@' signs
+                    raw_tokens = bulk_input.replace("\n", ",").replace(" ", ",").split(",")
+                    parsed_handles = []
+                    for token in raw_tokens:
+                        clean = token.strip().replace("@", "")
+                        if clean and clean not in parsed_handles:
+                            parsed_handles.append(clean)
+                    
+                    if parsed_handles:
+                        # Automatically hook them all up to Jinan to prevent the prune engine from deleting them
+                        current_jinan_connections = st.session_state[f"friends_{active_sc}"].get("Jinan", "")
+                        existing_list = [f.strip() for f in current_jinan_connections.split(",") if f.strip()]
+                        
+                        for handle in parsed_handles:
+                            if handle not in st.session_state[f"people_{active_sc}"]:
+                                st.session_state[f"people_{active_sc}"].append(handle)
+                                st.session_state[f"friends_{active_sc}"][handle] = ""
+                            if handle not in existing_list and handle != "Jinan":
+                                existing_list.append(handle)
+                        
+                        st.session_state[f"friends_{active_sc}"]["Jinan"] = ", ".join(existing_list)
+                        save_persisted_data()
+                        st.success(f"Successfully processed and mapped {len(parsed_handles)} profiles!")
                         st.rerun()
                 st.markdown("---")
 
             # --- DYNAMIC RELATIONSHIP BOX GENERATION ---
-            newly_discovered_friends = set()
             current_people = list(st.session_state[f"people_{active_sc}"])
+            state_mutated = False
 
             for person in current_people:
                 current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
                 box_label = f"Mutual connections of @{person}" if active_sc == "Scenario Beta" else f"Friends of {person}"
                 
                 user_input = st.text_input(f"🔗 {box_label}:", value=current_val, key=f"input_{active_sc}_{person}")
-                st.session_state[f"friends_{active_sc}"][person] = user_input
+                
+                # If data changes, update state and commit to disk
+                if user_input != current_val:
+                    st.session_state[f"friends_{active_sc}"][person] = user_input
+                    state_mutated = True
                 
                 friends_list = [f.strip().replace("@", "") for f in user_input.split(",") if f.strip()]
                 for friend in friends_list:
                     if friend not in st.session_state[f"people_{active_sc}"]:
-                        newly_discovered_friends.add(friend)
+                        st.session_state[f"people_{active_sc}"].append(friend)
+                        st.session_state[f"friends_{active_sc}"][friend] = ""
+                        state_mutated = True
 
-            if newly_discovered_friends:
-                for fresh_friend in newly_discovered_friends:
-                    st.session_state[f"people_{active_sc}"].append(fresh_friend)
-                    st.session_state[f"friends_{active_sc}"][fresh_friend] = ""
+            if state_mutated:
+                save_persisted_data()
                 st.rerun()
 
             # --- AUTO-PRUNING ENGINE ---
@@ -105,6 +169,7 @@ for index, tab_object in enumerate(tabs):
                 for target in nodes_to_auto_prune:
                     if target in st.session_state[f"people_{active_sc}"]: st.session_state[f"people_{active_sc}"].remove(target)
                     if target in st.session_state[f"friends_{active_sc}"]: del st.session_state[f"friends_{active_sc}"][target]
+                save_persisted_data()
                 st.rerun()
 
         with col_graph:
@@ -134,7 +199,7 @@ for index, tab_object in enumerate(tabs):
                 except nx.NetworkXNoPath:
                     st.error("❌ No path connects these nodes.")
 
-            # Metrics
+            # Metrics Display
             sm1, sm2, sm3 = st.columns(3)
             sm1.metric("Total Profile Nodes" if active_sc == "Scenario Beta" else "Active Nodes", len(G_active.nodes()))
             sm2.metric("Total Link Connections", len(G_active.edges()))
