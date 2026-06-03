@@ -1,0 +1,217 @@
+import streamlit as st
+import networkx as nx
+import plotly.graph_objects as go
+
+# Set up page configuration for maximum workspace deployment
+st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
+
+st.title("🛰️ Multi-Scenario 3D Social Constellation Suite")
+st.markdown("""
+* **Scenario Alpha & Gamma:** Standard custom name mapping.
+* **Scenario Beta:** Upgraded to target public Instagram profiles with live profile viewer links!
+""")
+
+# --- STREAMLIT SESSION STATE MEMORY STORAGE (ISOLATED BY SCENARIO) ---
+scenarios = ["Scenario Alpha", "Scenario Beta", "Scenario Gamma"]
+
+for sc in scenarios:
+    if f"people_{sc}" not in st.session_state:
+        st.session_state[f"people_{sc}"] = ["Jinan"]
+    if f"friends_{sc}" not in st.session_state:
+        st.session_state[f"friends_{sc}"] = {"Jinan": ""}
+
+# --- GLOBAL VISUAL SYSTEM CONFIGURATION ---
+st.sidebar.header("🎨 Constellation Styling")
+color_theme = st.sidebar.selectbox("Color Palette", ["Plasma", "Viridis", "Inferno", "Magma", "Cividis"])
+node_size_global = st.sidebar.slider("Node Display Radius", min_value=4, max_value=20, value=10, step=1)
+edge_color_global = st.sidebar.color_picker("Link Line Color", value="#888888")
+
+# --- SIDEBAR: SEARCH & PATHFINDING ---
+st.sidebar.markdown("---")
+with st.sidebar.expander("🔍 Search & Pathfinding Tools", expanded=False):
+    search_target_sc = st.selectbox("Select Scenario to Search:", options=scenarios, key="search_target_sc")
+    all_active_nodes = sorted(list(st.session_state[f"people_{search_target_sc}"]))
+    
+    target_pinpoint_global = st.selectbox("🎯 Pinpoint Node Location:", options=["None"] + all_active_nodes, key="global_pinpoint_select")
+    st.markdown("#### 🛣️ Friendship Route Finder")
+    path_start_global = st.selectbox("Start Person:", options=all_active_nodes, key="global_path_start")
+    path_end_global = st.selectbox("End Person:", options=all_active_nodes, key="global_path_end")
+
+# --- MAIN WORKSPACE MULTI-TAB SCENARIOS ---
+tabs = st.tabs([f"👥 {sc}" for sc in scenarios])
+
+for index, tab_object in enumerate(tabs):
+    active_sc = scenarios[index]
+    
+    with tab_object:
+        col_entry, col_graph = st.columns([1, 2])
+        
+        with col_entry:
+            st.markdown(f"### {active_sc} Registry")
+            
+            if st.button(f"Clear Current Canvas", key=f"reset_{active_sc}", use_container_width=True):
+                st.session_state[f"people_{active_sc}"] = ["Jinan"]
+                st.session_state[f"friends_{active_sc}"] = {"Jinan": ""}
+                st.rerun()
+                
+            st.markdown("---")
+            
+            # --- SPECIAL RULES FOR SCENARIO BETA (INSTAGRAM) ---
+            if active_sc == "Scenario Beta":
+                st.markdown("#### 📸 Instagram Profile Intake")
+                new_ig_handle = st.text_input("Add New Instagram Handle (e.g., @cristiano):", key="ig_intake_box")
+                
+                if st.button("Register Profile Node", use_container_width=True):
+                    cleaned_handle = new_ig_handle.strip().replace("@", "")
+                    if cleaned_handle and cleaned_handle not in st.session_state[f"people_{active_sc}"]:
+                        st.session_state[f"people_{active_sc}"].append(cleaned_handle)
+                        st.success(f"Registered node for @{cleaned_handle}!")
+                        st.rerun()
+                st.markdown("---")
+
+            # --- DYNAMIC RELATIONSHIP BOX GENERATION ---
+            newly_discovered_friends = set()
+            current_people = list(st.session_state[f"people_{active_sc}"])
+
+            for person in current_people:
+                current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
+                
+                # Dynamic labeling adjustments for Instagram context
+                box_label = f"Mutual connections of @{person}:" if active_sc == "Scenario Beta" else f"Friends of {person}:"
+                
+                user_input = st.text_input(box_label, value=current_val, key=f"input_{active_sc}_{person}")
+                st.session_state[f"friends_{active_sc}"][person] = user_input
+                
+                friends_list = [f.strip().replace("@", "") for f in user_input.split(",") if f.strip()]
+                for friend in friends_list:
+                    if friend not in st.session_state[f"people_{active_sc}"]:
+                        newly_discovered_friends.add(friend)
+
+            if newly_discovered_friends:
+                for fresh_friend in newly_discovered_friends:
+                    st.session_state[f"people_{active_sc}"].append(fresh_friend)
+                st.rerun()
+
+            # --- AUTO-PRUNING ENGINE ---
+            temp_G = nx.Graph()
+            for p in st.session_state[f"people_{active_sc}"]: temp_G.add_node(p)
+            for person, friends_str in st.session_state[f"friends_{active_sc}"].items():
+                flist = [f.strip().replace("@", "") for f in friends_str.split(",") if f.strip()]
+                for friend in flist:
+                    if temp_G.has_node(person) and temp_G.has_node(friend): temp_G.add_edge(person, friend)
+
+            nodes_to_auto_prune = [n for n in list(temp_G.nodes()) if n != "Jinan" and temp_G.degree(n) == 0]
+            if nodes_to_auto_prune:
+                for target in nodes_to_auto_prune:
+                    if target in st.session_state[f"people_{active_sc}"]: st.session_state[f"people_{active_sc}"].remove(target)
+                    if target in st.session_state[f"friends_{active_sc}"]: del st.session_state[f"friends_{active_sc}"][target]
+                st.rerun()
+
+        with col_graph:
+            # --- GRAPH CONSTRUCT ENGINE ---
+            G_active = nx.Graph()
+            for person in st.session_state[f"people_{active_sc}"]: G_active.add_node(person)
+            for person, friends_string in st.session_state[f"friends_{active_sc}"].items():
+                friends_list = [f.strip().replace("@", "") for f in friends_string.split(",") if f.strip()]
+                for friend in friends_list:
+                    if G_active.has_node(person) and G_active.has_node(friend): G_active.add_edge(person, friend)
+
+            pos_active = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
+
+            # --- PATHFINDING TRACE LOGIC ---
+            shortest_path_nodes = []
+            shortest_path_edges = set()
+            if active_sc == search_target_sc and path_start_global and path_end_global and path_start_global != path_end_global:
+                try:
+                    shortest_path_nodes = nx.shortest_path(G_active, source=path_start_global, target=path_end_global)
+                    for i in range(len(shortest_path_nodes) - 1):
+                        shortest_path_edges.add((shortest_path_nodes[i], shortest_path_nodes[i+1]))
+                        shortest_path_edges.add((shortest_path_nodes[i+1], shortest_path_nodes[i]))
+                    st.success(f"⛓️ **Route Found:** " + " ➔ ".join([f"**@{n}**" if active_sc == "Scenario Beta" else f"**{n}**" for n in shortest_path_nodes]))
+                except nx.NetworkXNoPath:
+                    st.error("❌ No path connects these nodes.")
+
+            # Metrics
+            sm1, sm2, sm3 = st.columns(3)
+            sm1.metric("Total Profile Nodes" if active_sc == "Scenario Beta" else "Active Nodes", len(G_active.nodes()))
+            sm2.metric("Total Link Connections", len(G_active.edges()))
+            sm3.metric("Isolated Social Islands", nx.number_connected_components(G_active))
+
+            # --- PLOTLY GRAPH ASSEMBLY ---
+            data_traces = []
+            edge_x, edge_y, edge_z = [], [], []
+            path_edge_x, path_edge_y, path_edge_z = [], [], []
+            
+            for u, v in G_active.edges():
+                x0, y0, z0 = pos_active[u]
+                x1, y1, z1 = pos_active[v]
+                if (u, v) in shortest_path_edges:
+                    path_edge_x.extend([x0, x1, None])
+                    path_edge_y.extend([y0, y1, None])
+                    path_edge_z.extend([z0, z1, None])
+                else:
+                    edge_x.extend([x0, x1, None])
+                    edge_y.extend([y0, y1, None])
+                    edge_z.extend([z0, z1, None])
+
+            if edge_x: data_traces.append(go.Scatter3d(x=edge_x, y=edge_y, z=edge_z, line=dict(width=2, color=edge_color_global), hoverinfo='none', mode='lines'))
+            if path_edge_x: data_traces.append(go.Scatter3d(x=path_edge_x, y=path_edge_y, z=path_edge_z, line=dict(width=6, color="#FF3333"), mode='lines'))
+
+            node_x, node_y, node_z, node_text, node_colors, custom_sizes, border_colors = [], [], [], [], [], [], []
+            
+            for node in G_active.nodes():
+                x, y, z = pos_active[node]
+                node_x.append(x)
+                node_y.append(y)
+                node_z.append(z)
+                deg = G_active.degree(node)
+                node_colors.append(deg)
+                
+                # Custom hovercards featuring quick public web links to Instagram profiles
+                if active_sc == "Scenario Beta" and node != "Jinan":
+                    node_text.append(f"<b>IG Handle:</b> @{node}<br><b>Connections:</b> {deg}<br>🔗 <i>Click marker to view public feed on dumpoir.com/{node}</i>")
+                else:
+                    node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}")
+                
+                if active_sc == search_target_sc and node == target_pinpoint_global:
+                    custom_sizes.append(node_size_global * 2.2)
+                    border_colors.append("#00FFFF")
+                elif active_sc == search_target_sc and node in shortest_path_nodes:
+                    custom_sizes.append(node_size_global * 1.5)
+                    border_colors.append("#FF3333")
+                else:
+                    custom_sizes.append(node_size_global)
+                    border_colors.append("#FFFFFF")
+
+            node_trace = go.Scatter3d(
+                x=node_x, y=node_y, z=node_z, mode='markers', hovertext=node_text, hoverinfo='text',
+                marker=dict(showscale=True, colorscale=color_theme, color=node_colors, size=custom_sizes, line=dict(width=1.5, color=border_colors))
+            )
+            data_traces.append(node_trace)
+
+            layout_active = go.Layout(
+                height=800, showlegend=False,
+                scene=dict(xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                           yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                           zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title='')),
+                margin=dict(l=0, r=0, b=0, t=0), hovermode='closest'
+            )
+            
+            fig_active = go.Figure(data=data_traces, layout=layout_active)
+            
+            # Instagram-specific click behavior using custom Plotly JS execution injection
+            if active_sc == "Scenario Beta":
+                fig_active.update_layout(clickmode='event+select')
+            
+            st.plotly_chart(fig_active, use_container_width=True, key=f"chart_{active_sc}")
+            
+            # Extra helpful web links directly under the chart view for Scenario Beta
+            if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
+                st.markdown("### 🌐 Quick Web Viewers")
+                cols = st.columns(min(len(G_active.nodes()) - 1, 5))
+                c_idx = 0
+                for n in G_active.nodes():
+                    if n != "Jinan":
+                        with cols[c_idx % len(cols)]:
+                            st.link_button(f"👀 @{n}", f"https://www.dumpoir.com/v/{n}", use_container_width=True)
+                        c_idx += 1
