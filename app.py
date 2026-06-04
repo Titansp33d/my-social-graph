@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import json
 import os
 import urllib.parse
-import streamlit.components.v1 as components
+import numpy as np
 
 # Define the persistent storage file path
 SAVE_FILE = "network_data.json"
@@ -15,7 +15,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Kinetic Animation Engine:** The 3D models will now continuously revolve automatically when not being interacted with.
+* **Native Animation Engine:** The 3D models now use Plotly's native frame loops to revolve securely within the browser sandbox.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -95,7 +95,7 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
-            # --- SCENARIO BETA: GLOBAL BASE BULK IMPORT ENGINE (FOR JINAN) ---
+            # --- SCENARIO BETA: GLOBAL BASE BULK IMPORT ENGINE ---
             if active_sc == "Scenario Beta":
                 st.markdown("#### 🚀 Global Instagram Importer (Add your main followers)")
                 bulk_input = st.text_area("Paste raw text list here:", height=90, key="global_bulk_import_area")
@@ -125,7 +125,7 @@ for index, tab_object in enumerate(tabs):
                         st.rerun()
                 st.markdown("---")
 
-            # --- DYNAMIC RELATIONSHIP BOX GENERATION + LOCAL MINI BULK IMPORTERS ---
+            # --- DYNAMIC RELATIONSHIP BOX GENERATION ---
             current_people = list(st.session_state[f"people_{active_sc}"])
             state_mutated = False
 
@@ -273,80 +273,65 @@ for index, tab_object in enumerate(tabs):
                 )
                 data_traces.append(node_trace)
 
-            # Set up default initialization camera coordinates
+            # --- NATIVE PLOTLY ANIMATION FRAME GENERATION ---
+            # Create a sequence of 60 unique camera frames mapped along a full 360-degree circle
+            nb_frames = 60
+            angles = np.linspace(0, 2 * np.pi, nb_frames, endpoint=False)
+            radius = 1.8
+            
+            graph_frames = []
+            for t in angles:
+                cam_x = radius * np.cos(t)
+                cam_y = radius * np.sin(t)
+                graph_frames.append(
+                    go.Frame(
+                        layout=dict(scene=dict(camera=dict(eye=dict(x=cam_x, y=cam_y, z=1.0))))
+                    )
+                )
+
+            # Construct Layout containing native autoplay controllers
             layout_active = go.Layout(
                 height=750, showlegend=False,
                 scene=dict(
                     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
                     yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
                     zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
-                    camera=dict(
-                        eye=dict(x=1.25, y=1.25, z=1.25) # Standard initialization view angle
-                    )
+                    camera=dict(eye=dict(x=radius * np.cos(0), y=radius * np.sin(0), z=1.0))
                 ),
-                margin=dict(l=0, r=0, b=0, t=0), hovermode='closest'
+                margin=dict(l=0, r=0, b=0, t=0), hovermode='closest',
+                updatemenus=[dict(
+                    type="buttons",
+                    showactive=False,
+                    x=0.05, y=0.05, # Place control menu subtly in the lower-left corner
+                    xanchor="left", yanchor="bottom",
+                    pad=dict(t=0, r=10),
+                    buttons=[
+                        dict(
+                            label="▶ Auto-Orbit",
+                            method="animate",
+                            args=[None, dict(
+                                frame=dict(duration=50, redraw=False), # Fast frame rendering loops
+                                fromcurrent=True,
+                                mode="immediate",
+                                transition=dict(duration=0, easing="linear"),
+                                loop=True # Keep looping continuously indefinitely
+                            )]
+                        ),
+                        dict(
+                            label="⏸ Pause",
+                            method="animate",
+                            args=[[None], dict(
+                                frame=dict(duration=0, redraw=False),
+                                mode="immediate",
+                                transition=dict(duration=0)
+                            )]
+                        )
+                    ]
+                )]
             )
             
-            fig_active = go.Figure(data=data_traces, layout=layout_active)
-            
-            # --- INJECTING THE AUTO-REVOLVE KINETIC ENGINE ---
-            # We assign a static DOM key to each chart so our JavaScript script can hook onto the exact canvas element
-            chart_id = f"plotly_chart_{active_sc.replace(' ', '_')}"
-            st.plotly_chart(fig_active, use_container_width=True, key=chart_id)
-            
-            # This hidden HTML script injects custom JavaScript to handle background 3D matrix math recalculations
-            components.html(
-                f"""
-                <script>
-                // Access parent page window elements to discover the chart wrapper canvas 
-                const parentDoc = window.parent.document;
-                
-                function locateAndAnimateChart() {{
-                    // Target Plotly's internal SVG container via the key assigned by Streamlit
-                    const graphDiv = parentDoc.querySelector('[data-testid="stPlotlyChart"] iframe');
-                    
-                    // Fallback search directly looking for the embedded Plotly instance elements
-                    const targetDiv = parentDoc.querySelector('.js-plotly-plot') || parentDoc.querySelector('[id^="plotly-html-element"]');
-                    
-                    if (!targetDiv) {{
-                        // If DOM hasn't fully loaded yet, try again in 500ms
-                        setTimeout(locateAndAnimateChart, 500);
-                        return;
-                    }}
-                    
-                    let angle = 0;
-                    const radius = 1.8; // Camera circular distance vector radius
-                    
-                    function rotateCamera() {{
-                        // Calculate trigonometric circle vector positions
-                        angle += 0.003; // Slow, aesthetically pleasing rotation velocity constant
-                        const x = radius * Math.cos(angle);
-                        const y = radius * Math.sin(angle);
-                        
-                        // Execute internal Plotly relayout calculation to swing the camera framework smoothly
-                        if (typeof window.Plotly !== 'undefined') {{
-                            window.Plotly.relayout(targetDiv, {{
-                                'scene.camera.eye': {{ x: x, y: y, z: 1.0 }}
-                            }});
-                        }} else if (targetDiv.relayout) {{
-                            targetDiv.relayout({{
-                                'scene.camera.eye': {{ x: x, y: y, z: 1.0 }}
-                            }});
-                        }}
-                        
-                        requestAnimationFrame(rotateCamera);
-                    }}
-                    
-                    // Initialize rotation loop execution
-                    rotateCamera();
-                }}
-                
-                // Fire off loader query sequence
-                setTimeout(locateAndAnimateChart, 800);
-                </script>
-                """,
-                height=0, # Completely hidden transparent component viewport wrapper
-            )
+            fig_active = go.Figure(data=data_traces, layout=layout_active, frames=graph_frames)
+            st.plotly_chart(fig_active, use_container_width=True, key=f"chart_embed_{active_sc.replace(' ', '_')}")
             
             # --- DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
             if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
