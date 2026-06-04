@@ -15,7 +15,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Isolated Animation Sandbox:** The entire Plotly engine runs directly alongside the JavaScript rotator inside a secure browser frame to ensure flawless automatic camera orbiting.
+* **Orbit Controls Connected:** Use the floating button on the bottom left of the graph to toggle between auto-rotation and manual mouse control.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -287,8 +287,7 @@ for index, tab_object in enumerate(tabs):
             
             fig_active = go.Figure(data=data_traces, layout=layout_active)
             
-            # --- CONVERT GRAPH TO BRICK-WALL SECURE HTML STRING ---
-            # Extract raw underlying configuration dict structures to build clean raw javascript injection variables
+            # --- CONVERT GRAPH TO HTML STRING WITH CONTROL HUD ---
             fig_json = fig_active.to_json()
             unique_id_tag = f"plot_{active_sc.replace(' ', '_')}"
             
@@ -298,45 +297,90 @@ for index, tab_object in enumerate(tabs):
             <head>
                 <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
                 <style>
-                    body, html {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0E1117; }}
-                    #render_box {{ width: 100%; height: 760px; }}
+                    body, html {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0E1117; font-family: system-ui, sans-serif; }}
+                    #render_box {{ width: 100%; height: 760px; position: relative; }}
+                    
+                    /* Styling the control HUD button */
+                    #control_hud {{
+                        position: absolute;
+                        bottom: 25px;
+                        left: 25px;
+                        z-index: 9999;
+                        background: rgba(38, 41, 50, 0.85);
+                        border: 1px solid rgba(255, 255, 255, 0.15);
+                        padding: 8px 14px;
+                        border-radius: 8px;
+                        color: white;
+                        cursor: pointer;
+                        font-size: 13px;
+                        font-weight: 600;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                        transition: all 0.2s ease;
+                        user-select: none;
+                    }}
+                    #control_hud:hover {{
+                        background: rgba(255, 255, 255, 0.1);
+                        border-color: rgba(255, 255, 255, 0.3);
+                    }}
                 </style>
             </head>
             <body>
-                <div id="{unique_id_tag}"></div>
+                <div id="render_box">
+                    <div id="control_hud" onclick="toggleOrbit()">⏸️ Pause Auto-Orbit</div>
+                    <div id="{unique_id_tag}" style="width: 100%; height: 100%;"></div>
+                </div>
+                
                 <script>
                     const plotData = {fig_json};
                     const chartDomNode = document.getElementById('{unique_id_tag}');
+                    const hudButton = document.getElementById('control_hud');
                     
-                    // Render layout natively inside the unified sandbox
                     Plotly.newPlot(chartDomNode, plotData.data, plotData.layout, {{responsive: true, displayModeBar: true}});
                     
                     let radAngle = 0;
-                    const radius = 1.7; // Visual tracking distance
+                    const radius = 1.7; 
+                    let isOrbiting = true; // State tracking variable
+
+                    function toggleOrbit() {{
+                        isOrbiting = !isOrbiting;
+                        if(isOrbiting) {{
+                            hudButton.innerHTML = "⏸️ Pause Auto-Orbit";
+                            hudButton.style.color = "white";
+                            // Read current viewport angle when resuming to prevent snappy positioning jumps
+                            try {{
+                                const currentEye = chartDomNode._fullLayout.scene.camera.eye;
+                                radAngle = Math.atan2(currentEye.y, currentEye.x);
+                            }} catch(e) {{}}
+                        }} else {{
+                            hudButton.innerHTML = "▶️ Resume Auto-Orbit (Manual Mode Active)";
+                            hudButton.style.color = "#00FFFF";
+                        }}
+                    }}
                     
                     function runCameraOrbitLoop() {{
-                        radAngle += 0.003; // Smooth animation speed step variable
-                        const nextX = radius * Math.cos(radAngle);
-                        const nextY = radius * Math.sin(radAngle);
-                        
-                        try {{
-                            Plotly.relayout(chartDomNode, {{
-                                'scene.camera.eye': {{ x: nextX, y: nextY, z: 1.0 }}
-                            }});
-                        }} catch(err) {{
-                            // Dropping frame render processing gracefully if user is clicking around elements
+                        if (isOrbiting) {{
+                            radAngle += 0.003; 
+                            const nextX = radius * Math.cos(radAngle);
+                            const nextY = radius * Math.sin(radAngle);
+                            
+                            try {{
+                                Plotly.relayout(chartDomNode, {{
+                                    'scene.camera.eye': {{ x: nextX, y: nextY, z: 1.0 }}
+                                }});
+                            }} catch(err) {{}}
                         }}
                         requestAnimationFrame(runCameraOrbitLoop);
                     }}
                     
-                    // Allow graph instantiation rendering engine overhead brief window to settle before firing orbit
                     setTimeout(runCameraOrbitLoop, 300);
                 </script>
             </body>
             </html>
             """
             
-            # Mount our standalone component container frame onto Streamlit layout panel column
             components.html(sandbox_html, height=770)
             
             # --- DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
