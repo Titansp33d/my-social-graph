@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import json
 import os
 import urllib.parse
+import streamlit.components.v1 as components
 
 # Define the persistent storage file path
 SAVE_FILE = "network_data.json"
@@ -14,7 +15,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Stable 3D Engine:** Reverted to the traditional static Plotly layout for clean, reliable manual rotation and exploration.
+* **Automated View Angle:** The web browser will attempt to rotate the viewport camera around the static 3D layout smoothly.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -132,14 +133,12 @@ for index, tab_object in enumerate(tabs):
                 current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
                 box_label = f"Mutual connections of @{person}" if active_sc == "Scenario Beta" else f"Friends of {person}"
                 
-                # Standard Text Entry Field
                 user_input = st.text_input(f"🔗 {box_label}:", value=current_val, key=f"input_{active_sc}_{person}")
                 
                 if user_input != current_val:
                     st.session_state[f"friends_{active_sc}"][person] = user_input
                     state_mutated = True
                 
-                # Local Bulk Copy Box for every individual person field
                 with st.expander(f"📋 Bulk Text Importer for {person}", expanded=False):
                     local_bulk_input = st.text_area("Paste copied text list for this individual here:", height=80, key=f"bulk_local_{active_sc}_{person}")
                     if st.button("Process & Link Mutuals", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
@@ -276,14 +275,63 @@ for index, tab_object in enumerate(tabs):
 
             layout_active = go.Layout(
                 height=800, showlegend=False,
-                scene=dict(xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
-                           yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
-                           zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title='')),
+                scene=dict(
+                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                    zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                    camera=dict(eye=dict(x=1.5, y=1.5, z=1.0))
+                ),
                 margin=dict(l=0, r=0, b=0, t=0), hovermode='closest'
             )
             
             fig_active = go.Figure(data=data_traces, layout=layout_active)
-            st.plotly_chart(fig_active, use_container_width=True, key=f"chart_{active_sc}")
+            
+            chart_id = f"plotly_canvas_{active_sc.replace(' ', '_')}"
+            st.plotly_chart(fig_active, use_container_width=True, key=chart_id)
+            
+            # --- PERSISTENT BROWSER-SIDE CAMERA ROTATION ENGINE ---
+            components.html(
+                f"""
+                <script>
+                const doc = window.parent.document;
+                
+                function initCameraOrbit() {{
+                    const chartWrapper = doc.querySelector('[data-testid="stPlotlyChart"]');
+                    if (!chartWrapper) {{
+                        setTimeout(initCameraOrbit, 300);
+                        return;
+                    }}
+                    
+                    const targetPlot = chartWrapper.querySelector('.js-plotly-plot');
+                    if (!targetPlot) {{
+                        setTimeout(initCameraOrbit, 300);
+                        return;
+                    }}
+
+                    let radAngle = 0;
+                    const radius = 1.7;
+                    
+                    function stepOrbit() {{
+                        radAngle += 0.002; 
+                        const newX = radius * Math.cos(radAngle);
+                        const newY = radius * Math.sin(radAngle);
+                        
+                        try {{
+                            window.parent.Plotly.relayout(targetPlot, {{
+                                'scene.camera.eye': {{ x: newX, y: newY, z: 1.0 }}
+                            }});
+                        }} catch(err) {{
+                            // Fail silently if chart is redrawing
+                        }}
+                        requestAnimationFrame(stepOrbit);
+                    }}
+                    stepOrbit();
+                }}
+                setTimeout(initCameraOrbit, 500);
+                </script>
+                """,
+                height=0
+            )
             
             # --- DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
             if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
