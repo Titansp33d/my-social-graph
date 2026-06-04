@@ -184,13 +184,11 @@ for index, tab_object in enumerate(tabs):
                 
                 st.markdown(f"#### {box_label}")
                 
-                # Current connections display list
                 if current_val:
                     st.caption(f"Current Linked Connections: {current_val}")
                 else:
                     st.caption("No connections registered.")
                 
-                # Standardized Multi-line Input Workspace for every individual profile row
                 local_input = st.text_area(
                     "Paste unstructured text or platform data strings here:", 
                     height=100, 
@@ -214,18 +212,15 @@ for index, tab_object in enumerate(tabs):
                     if local_parsed:
                         existing_list = [f.strip() for f in current_val.split(",") if f.strip()]
                         for handle in local_parsed:
-                            # Verify node exists globally in current canvas scenario
                             if handle not in st.session_state[f"people_{active_sc}"]:
                                 st.session_state[f"people_{active_sc}"].append(handle)
                                 st.session_state[f"friends_{active_sc}"][handle] = ""
-                            # Add symmetric link back if missing
                             if handle not in existing_list and handle != person:
                                 existing_list.append(handle)
                         
                         st.session_state[f"friends_{active_sc}"][person] = ", ".join(existing_list)
                         state_mutated = True
 
-                # Cross-reference dynamic link maps automatically
                 friends_list = [f.strip().replace("@", "") for f in st.session_state[f"friends_{active_sc}"][person].split(",") if f.strip()]
                 for friend in friends_list:
                     if friend not in st.session_state[f"people_{active_sc}"]:
@@ -310,33 +305,55 @@ for index, tab_object in enumerate(tabs):
 
             node_x, node_y, node_z, node_text, node_colors, custom_sizes, border_colors = [], [], [], [], [], [], []
             
+            # Determine maximum connection limit inside the graph scenario to calculate relative density mapping
+            max_degree = max([G_active.degree(node) for node in G_active.nodes()]) if len(G_active.nodes()) > 0 else 1
+
             for node in G_active.nodes():
                 x, y, z = pos_active[node]
                 node_x.append(x)
                 node_y.append(y)
                 node_z.append(z)
                 deg = G_active.degree(node)
-                node_colors.append(deg)
+                
+                # RELATIVE SCALING: Nodes with higher connection density relative to others are exponentially 
+                # emphasized by dividing their degree by max_degree.
+                relative_density_weight = (deg / max_degree)
+                node_colors.append(relative_density_weight)
                 
                 if active_sc == "Scenario Beta" and node != "Jinan":
-                    node_text.append(f"<b>Handle:</b> {node}<br><b>Connections:</b> {deg}<br><i>Expand cross-references below</i>")
+                    node_text.append(f"<b>Handle:</b> {node}<br><b>Connections:</b> {deg}<br><b>Relative Hub Weight:</b> {relative_density_weight:.2f}<br><i>Expand cross-references below</i>")
                 else:
-                    node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}")
+                    node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}<br><b>Relative Hub Weight:</b> {relative_density_weight:.2f}")
                 
+                # Apply high-contrast sizing to accounts with structural high density
                 if active_sc == search_target_sc and node == target_pinpoint_global:
-                    custom_sizes.append(node_size_global * 2.2)
+                    custom_sizes.append(node_size_global * 2.5)
                     border_colors.append("#00FFFF")
+                elif deg == max_degree and max_degree > 1:
+                    # Automatically highlight peak density nodes with enhanced physical scaling
+                    custom_sizes.append(node_size_global * 1.8)
+                    border_colors.append("#FFCC00")
                 elif active_sc == search_target_sc and node in shortest_path_nodes:
                     custom_sizes.append(node_size_global * 1.5)
                     border_colors.append("#FF3333")
                 else:
-                    custom_sizes.append(node_size_global)
+                    custom_sizes.append(node_size_global + (relative_density_weight * 8))
                     border_colors.append("#FFFFFF")
 
             if node_x:
                 node_trace = go.Scatter3d(
                     x=node_x, y=node_y, z=node_z, mode='markers', hovertext=node_text, hoverinfo='text',
-                    marker=dict(showscale=True, colorscale=color_theme, color=node_colors, size=custom_sizes, line=dict(width=1.5, color=border_colors))
+                    marker=dict(
+                        showscale=True, 
+                        colorscale=color_theme, 
+                        color=node_colors, 
+                        size=custom_sizes, 
+                        line=dict(width=1.5, color=border_colors),
+                        # Set absolute limits from 0.0 (low) to 1.0 (peak scenario hub density)
+                        cmin=0.0,
+                        cmax=1.0,
+                        colorbar=dict(title="Relative Density Weight", titleside="top", tickvals=[0, 0.5, 1.0], ticktext=["Low", "Medium", "Peak Hub"])
+                    )
                 )
                 data_traces.append(node_trace)
 
