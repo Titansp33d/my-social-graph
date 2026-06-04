@@ -158,7 +158,7 @@ for index, tab_object in enumerate(tabs):
                         
                         for handle in parsed_handles:
                             if handle not in st.session_state[f"people_{active_sc}"]:
-                                st.session_state[f"people_{active_sc}/"].append(handle)
+                                st.session_state[f"people_{active_sc}"].append(handle)
                                 st.session_state[f"friends_{active_sc}"][handle] = ""
                             if handle not in existing_list and handle != "Jinan":
                                 existing_list.append(handle)
