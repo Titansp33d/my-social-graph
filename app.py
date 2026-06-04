@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import json
 import os
 import urllib.parse
+import streamlit.components.v1 as components
 
 # Define the persistent storage file path
 SAVE_FILE = "network_data.json"
@@ -14,7 +15,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Cross-Platform OSINT Suite:** Expand the profile dropdowns below the chart to cross-reference Instagram handles against LinkedIn and web identities.
+* **Kinetic Animation Engine:** The 3D models will now continuously revolve automatically when not being interacted with.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -132,14 +133,12 @@ for index, tab_object in enumerate(tabs):
                 current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
                 box_label = f"Mutual connections of @{person}" if active_sc == "Scenario Beta" else f"Friends of {person}"
                 
-                # Standard Text Entry Field
                 user_input = st.text_input(f"🔗 {box_label}:", value=current_val, key=f"input_{active_sc}_{person}")
                 
                 if user_input != current_val:
                     st.session_state[f"friends_{active_sc}"][person] = user_input
                     state_mutated = True
                 
-                # Local Mini Bulk Text Area Expansion
                 with st.expander(f"📋 Bulk Text Importer for {person}", expanded=False):
                     local_bulk_input = st.text_area("Paste copied text list for this individual here:", height=80, key=f"bulk_local_{active_sc}_{person}")
                     if st.button("Process & Link Mutuals", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
@@ -162,7 +161,6 @@ for index, tab_object in enumerate(tabs):
                             st.session_state[f"friends_{active_sc}"][person] = ", ".join(existing_list)
                             state_mutated = True
                 
-                # Update loop for standard nodes
                 friends_list = [f.strip().replace("@", "") for f in st.session_state[f"friends_{active_sc}"][person].split(",") if f.strip()]
                 for friend in friends_list:
                     if friend not in st.session_state[f"people_{active_sc}"]:
@@ -275,23 +273,85 @@ for index, tab_object in enumerate(tabs):
                 )
                 data_traces.append(node_trace)
 
+            # Set up default initialization camera coordinates
             layout_active = go.Layout(
-                height=800, showlegend=False,
-                scene=dict(xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
-                           yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
-                           zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title='')),
+                height=750, showlegend=False,
+                scene=dict(
+                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                    zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                    camera=dict(
+                        eye=dict(x=1.25, y=1.25, z=1.25) # Standard initialization view angle
+                    )
+                ),
                 margin=dict(l=0, r=0, b=0, t=0), hovermode='closest'
             )
             
             fig_active = go.Figure(data=data_traces, layout=layout_active)
-            st.plotly_chart(fig_active, use_container_width=True, key=f"chart_{active_sc}")
             
-            # --- UPGRADED: DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
+            # --- INJECTING THE AUTO-REVOLVE KINETIC ENGINE ---
+            # We assign a static DOM key to each chart so our JavaScript script can hook onto the exact canvas element
+            chart_id = f"plotly_chart_{active_sc.replace(' ', '_')}"
+            st.plotly_chart(fig_active, use_container_width=True, key=chart_id)
+            
+            # This hidden HTML script injects custom JavaScript to handle background 3D matrix math recalculations
+            components.html(
+                f"""
+                <script>
+                // Access parent page window elements to discover the chart wrapper canvas 
+                const parentDoc = window.parent.document;
+                
+                function locateAndAnimateChart() {{
+                    // Target Plotly's internal SVG container via the key assigned by Streamlit
+                    const graphDiv = parentDoc.querySelector('[data-testid="stPlotlyChart"] iframe');
+                    
+                    // Fallback search directly looking for the embedded Plotly instance elements
+                    const targetDiv = parentDoc.querySelector('.js-plotly-plot') || parentDoc.querySelector('[id^="plotly-html-element"]');
+                    
+                    if (!targetDiv) {{
+                        // If DOM hasn't fully loaded yet, try again in 500ms
+                        setTimeout(locateAndAnimateChart, 500);
+                        return;
+                    }}
+                    
+                    let angle = 0;
+                    const radius = 1.8; // Camera circular distance vector radius
+                    
+                    function rotateCamera() {{
+                        // Calculate trigonometric circle vector positions
+                        angle += 0.003; // Slow, aesthetically pleasing rotation velocity constant
+                        const x = radius * Math.cos(angle);
+                        const y = radius * Math.sin(angle);
+                        
+                        // Execute internal Plotly relayout calculation to swing the camera framework smoothly
+                        if (typeof window.Plotly !== 'undefined') {{
+                            window.Plotly.relayout(targetDiv, {{
+                                'scene.camera.eye': {{ x: x, y: y, z: 1.0 }}
+                            }});
+                        }} else if (targetDiv.relayout) {{
+                            targetDiv.relayout({{
+                                'scene.camera.eye': {{ x: x, y: y, z: 1.0 }}
+                            }});
+                        }}
+                        
+                        requestAnimationFrame(rotateCamera);
+                    }}
+                    
+                    // Initialize rotation loop execution
+                    rotateCamera();
+                }}
+                
+                // Fire off loader query sequence
+                setTimeout(locateAndAnimateChart, 800);
+                </script>
+                """,
+                height=0, # Completely hidden transparent component viewport wrapper
+            )
+            
+            # --- DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
             if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
                 st.markdown("### 🔍 Profile Reconnaissance Dashboard")
-                st.caption("Expand any profile to run background cross-platform matches via handle footprint queries:")
                 
-                # Split profiles into neat 2-column masonry grids to look tidy
                 dash_col1, dash_col2 = st.columns(2)
                 sorted_profiles = sorted([n for n in G_active.nodes() if n != "Jinan"])
                 
@@ -300,38 +360,17 @@ for index, tab_object in enumerate(tabs):
                     
                     with target_column:
                         with st.expander(f"👤 @{n} (Verify Platform Footprint)", expanded=False):
-                            
-                            # Encode strings safely to keep URLs from breaking on spaces/special symbols
                             encoded_handle = urllib.parse.quote(n)
-                            
                             st.markdown(f"**Target Handle Reference:** `{n}`")
                             
-                            # Platform Link Launchers
                             btn_ig, btn_li, btn_web = st.columns(3)
-                            
                             with btn_ig:
-                                st.link_button(
-                                    "📸 Instagram", 
-                                    f"https://www.instagram.com/{encoded_handle}", 
-                                    use_container_width=True
-                                )
-                            
+                                st.link_button("📸 Instagram", f"https://www.instagram.com/{encoded_handle}", use_container_width=True)
                             with btn_li:
-                                # Deep-link search directly querying LinkedIn's search layout for exact matches
                                 linkedin_search_url = f"https://www.linkedin.com/search/results/all/?keywords={encoded_handle}"
-                                st.link_button(
-                                    "💼 LinkedIn Match", 
-                                    linkedin_search_url, 
-                                    use_container_width=True
-                                )
-                                
+                                st.link_button("💼 LinkedIn Match", linkedin_search_url, use_container_width=True)
                             with btn_web:
-                                # Combined string search to locate profile pictures, identical handles, or common bios
                                 web_recon_url = f"https://www.google.com/search?q=%22{encoded_handle}%22+site:linkedin.com+OR+site:instagram.com"
-                                st.link_button(
-                                    "🌐 Web Footprints", 
-                                    web_recon_url, 
-                                    use_container_width=True
-                                )
+                                st.link_button("🌐 Web Footprints", web_recon_url, use_container_width=True)
                                 
                             st.caption("💡 *Tip: Check if the LinkedIn profile matches the structural bio text or location details seen on their Instagram.*")
