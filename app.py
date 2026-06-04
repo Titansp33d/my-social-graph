@@ -95,7 +95,7 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
-            # --- SCENARIO BETA: DATA INGESTION ENGINE ---
+            # --- SCENARIO BETA: MAIN ROOT DATA INGESTION ENGINE ---
             if active_sc == "Scenario Beta":
                 import_mode = st.radio("Select Input Method:", ["Raw Clipboard Paste", "File Upload (CSV/JSON/TXT)"], horizontal=True)
                 run_ingestion = False
@@ -157,7 +157,6 @@ for index, tab_object in enumerate(tabs):
                             if parsed_handles:
                                 run_ingestion = True
 
-                # Permanent serialization block completely disjointed from frontend checks
                 if run_ingestion and parsed_handles:
                     current_jinan_connections = st.session_state[f"friends_{active_sc}"].get("Jinan", "")
                     existing_list = [f.strip() for f in current_jinan_connections.split(",") if f.strip()]
@@ -175,7 +174,7 @@ for index, tab_object in enumerate(tabs):
                     st.rerun()
                 st.markdown("---")
 
-            # --- DYNAMIC RELATIONSHIP BOX GENERATION ---
+            # --- DYNAMIC PROFILE ROW ENGINE ---
             current_people = list(st.session_state[f"people_{active_sc}"])
             state_mutated = False
 
@@ -183,44 +182,58 @@ for index, tab_object in enumerate(tabs):
                 current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
                 box_label = f"Mutual connections of {person}" if active_sc == "Scenario Beta" else f"Connections of {person}"
                 
-                user_input = st.text_input(f"Link: {box_label}:", value=current_val, key=f"input_{active_sc}_{person}")
+                st.markdown(f"#### {box_label}")
                 
-                if user_input != current_val:
-                    st.session_state[f"friends_{active_sc}"][person] = user_input
-                    state_mutated = True
+                # Current connections display list
+                if current_val:
+                    st.caption(f"Current Linked Connections: {current_val}")
+                else:
+                    st.caption("No connections registered.")
                 
-                with st.expander(f"Bulk Text Importer for {person}", expanded=False):
-                    local_bulk_input = st.text_area("Paste copied text list for this individual here:", height=80, key=f"bulk_local_{active_sc}_{person}")
-                    if st.button("Process and Link Mutual Connections", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
-                        normalized_text = local_bulk_input.replace("\n", " ").replace(",", " ")
-                        raw_tokens = normalized_text.split()
-                        
-                        local_parsed = []
-                        for token in raw_tokens:
-                            clean = token.strip().replace("@", "")
-                            if clean.lower() in ["follow", "following", "requested", "remove", "verified", "profile", "posts", "followers", "message"]:
-                                continue
-                            if clean and clean not in local_parsed:
+                # Standardized Multi-line Input Workspace for every individual profile row
+                local_input = st.text_area(
+                    "Paste unstructured text or platform data strings here:", 
+                    height=100, 
+                    key=f"area_local_{active_sc}_{person}",
+                    help="Accepts lists separated by spaces, tabs, commas, or new lines."
+                )
+                
+                if st.button("Process Clipboard Data", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
+                    normalized_text = local_input.replace("\n", " ").replace(",", " ")
+                    raw_tokens = normalized_text.split()
+                    
+                    local_parsed = []
+                    for token in raw_tokens:
+                        clean = token.strip().replace("@", "")
+                        if clean.lower() in ["follow", "following", "requested", "remove", "verified", "profile", "posts", "followers", "message"]:
+                            continue
+                        if clean and all(c.isalnum() or c in "._" for c in clean):
+                            if clean not in local_parsed:
                                 local_parsed.append(clean)
+                    
+                    if local_parsed:
+                        existing_list = [f.strip() for f in current_val.split(",") if f.strip()]
+                        for handle in local_parsed:
+                            # Verify node exists globally in current canvas scenario
+                            if handle not in st.session_state[f"people_{active_sc}"]:
+                                st.session_state[f"people_{active_sc}"].append(handle)
+                                st.session_state[f"friends_{active_sc}"][handle] = ""
+                            # Add symmetric link back if missing
+                            if handle not in existing_list and handle != person:
+                                existing_list.append(handle)
                         
-                        if local_parsed:
-                            existing_list = [f.strip() for f in current_val.split(",") if f.strip()]
-                            for handle in local_parsed:
-                                if handle not in st.session_state[f"people_{active_sc}"]:
-                                    st.session_state[f"people_{active_sc}"].append(handle)
-                                    st.session_state[f"friends_{active_sc}"][handle] = ""
-                                if handle not in existing_list and handle != person:
-                                    existing_list.append(handle)
-                            
-                            st.session_state[f"friends_{active_sc}"][person] = ", ".join(existing_list)
-                            state_mutated = True
-                
+                        st.session_state[f"friends_{active_sc}"][person] = ", ".join(existing_list)
+                        state_mutated = True
+
+                # Cross-reference dynamic link maps automatically
                 friends_list = [f.strip().replace("@", "") for f in st.session_state[f"friends_{active_sc}"][person].split(",") if f.strip()]
                 for friend in friends_list:
                     if friend not in st.session_state[f"people_{active_sc}"]:
                         st.session_state[f"people_{active_sc}"].append(friend)
                         st.session_state[f"friends_{active_sc}"][friend] = ""
                         state_mutated = True
+                
+                st.markdown("---")
 
             if state_mutated:
                 save_persisted_data()
