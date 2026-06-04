@@ -1,8 +1,9 @@
 import streamlit as st
+import networkx as nx
+import plotly.graph_objects as go
 import json
 import os
 import urllib.parse
-import streamlit.components.v1 as components
 
 # Define the persistent storage file path
 SAVE_FILE = "network_data.json"
@@ -10,10 +11,10 @@ SAVE_FILE = "network_data.json"
 # Set up page configuration
 st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 
-st.title("🛰️ Multi-Scenario Persistent Social Constellation Suite")
+st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **VisJS Physics Engine Active:** The graph will naturally bounce, spin, unfold, and animate itself automatically using native browser graphics acceleration!
+* **Stable 3D Engine:** Reverted to the traditional static Plotly layout for clean, reliable manual rotation and exploration.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -55,6 +56,23 @@ for sc in scenarios:
             st.session_state[f"friends_{sc}"] = saved_data["scenarios"][sc]["friends"]
         else:
             st.session_state[f"friends_{sc}"] = {"Jinan": ""}
+
+# --- GLOBAL VISUAL SYSTEM CONFIGURATION ---
+st.sidebar.header("🎨 Constellation Styling")
+color_theme = st.sidebar.selectbox("Color Palette", ["Plasma", "Viridis", "Inferno", "Magma", "Cividis"])
+node_size_global = st.sidebar.slider("Node Display Radius", min_value=4, max_value=20, value=10, step=1)
+edge_color_global = st.sidebar.color_picker("Link Line Color", value="#888888")
+
+# --- SIDEBAR: SEARCH & PATHFINDING ---
+st.sidebar.markdown("---")
+with st.sidebar.expander("🔍 Search & Pathfinding Tools", expanded=False):
+    search_target_sc = st.selectbox("Select Scenario to Search:", options=scenarios, key="search_target_sc")
+    all_active_nodes = sorted(list(st.session_state[f"people_{search_target_sc}"]))
+    
+    target_pinpoint_global = st.selectbox("🎯 Pinpoint Node Location:", options=["None"] + all_active_nodes, key="global_pinpoint_select")
+    st.markdown("#### 🛣️ Friendship Route Finder")
+    path_start_global = st.selectbox("Start Person:", options=all_active_nodes, key="global_path_start")
+    path_end_global = st.selectbox("End Person:", options=all_active_nodes, key="global_path_end")
 
 # --- MAIN WORKSPACE MULTI-TAB SCENARIOS ---
 tabs = st.tabs([f"👥 {sc}" for sc in scenarios])
@@ -106,7 +124,7 @@ for index, tab_object in enumerate(tabs):
                         st.rerun()
                 st.markdown("---")
 
-            # --- DYNAMIC RELATIONSHIP BOX GENERATION ---
+            # --- DYNAMIC RELATIONSHIP BOX GENERATION + LOCAL MINI BULK IMPORTERS ---
             current_people = list(st.session_state[f"people_{active_sc}"])
             state_mutated = False
 
@@ -114,12 +132,14 @@ for index, tab_object in enumerate(tabs):
                 current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
                 box_label = f"Mutual connections of @{person}" if active_sc == "Scenario Beta" else f"Friends of {person}"
                 
+                # Standard Text Entry Field
                 user_input = st.text_input(f"🔗 {box_label}:", value=current_val, key=f"input_{active_sc}_{person}")
                 
                 if user_input != current_val:
                     st.session_state[f"friends_{active_sc}"][person] = user_input
                     state_mutated = True
                 
+                # Local Bulk Copy Box for every individual person field
                 with st.expander(f"📋 Bulk Text Importer for {person}", expanded=False):
                     local_bulk_input = st.text_area("Paste copied text list for this individual here:", height=80, key=f"bulk_local_{active_sc}_{person}")
                     if st.button("Process & Link Mutuals", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
@@ -153,108 +173,124 @@ for index, tab_object in enumerate(tabs):
                 save_persisted_data()
                 st.rerun()
 
+            # --- AUTO-PRUNING ENGINE ---
+            temp_G = nx.Graph()
+            for p in st.session_state[f"people_{active_sc}"]: temp_G.add_node(p)
+            for person, friends_str in st.session_state[f"friends_{active_sc}"].items():
+                flist = [f.strip().replace("@", "") for f in friends_str.split(",") if f.strip()]
+                for friend in flist:
+                    if temp_G.has_node(person) and temp_G.has_node(friend): temp_G.add_edge(person, friend)
+
+            nodes_to_auto_prune = [n for n in list(temp_G.nodes()) if n != "Jinan" and temp_G.degree(n) == 0]
+            if nodes_to_auto_prune:
+                for target in nodes_to_auto_prune:
+                    if target in st.session_state[f"people_{active_sc}"]: st.session_state[f"people_{active_sc}"].remove(target)
+                    if target in st.session_state[f"friends_{active_sc}"]: del st.session_state[f"friends_{active_sc}"][target]
+                save_persisted_data()
+                st.rerun()
+
         with col_graph:
-            # --- ASSEMBLE JAVASCRIPT OBJECT DATA ARRAYS ---
-            js_nodes = []
-            js_edges = []
-            
-            # Map out nodes and give the main node "Jinan" a distinct visual pop color
-            for person in st.session_state[f"people_{active_sc}"]:
-                is_jinan = person == "Jinan"
-                node_color = "#FF3366" if is_jinan else "#00FFFF"
-                node_size = 30 if is_jinan else 18
-                label_text = f"⭐ {person}" if is_jinan else f"@{person}" if active_sc == "Scenario Beta" else person
-                
-                js_nodes.append({
-                    "id": person, 
-                    "label": label_text, 
-                    "color": node_color, 
-                    "size": node_size,
-                    "font": {"color": "#FFFFFF", "size": 14}
-                })
-                
-            # Wire up line link connections
-            edges_tracked = set()
+            # --- GRAPH CONSTRUCT ENGINE ---
+            G_active = nx.Graph()
+            for person in st.session_state[f"people_{active_sc}"]: G_active.add_node(person)
             for person, friends_string in st.session_state[f"friends_{active_sc}"].items():
                 friends_list = [f.strip().replace("@", "") for f in friends_string.split(",") if f.strip()]
                 for friend in friends_list:
-                    if friend in st.session_state[f"people_{active_sc}"]:
-                        edge_key = tuple(sorted([person, friend]))
-                        if edge_key not in edges_tracked:
-                            edges_tracked.add(edge_key)
-                            js_edges.append({"from": person, "to": friend, "color": {"color": "#888888", "opacity": 0.6}})
+                    if G_active.has_node(person) and G_active.has_node(friend): G_active.add_edge(person, friend)
 
-            # Convert to clean stringified JSON structures to send across the iframe bridge safely
-            nodes_json = json.dumps(js_nodes)
-            edges_json = json.dumps(js_edges)
+            if len(G_active.nodes()) > 0:
+                pos_active = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
+            else:
+                pos_active = {}
 
-            # --- RENDER THE INTERACTIVE WEB CANVAS ---
-            vis_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-                <style type="text/css">
-                    #network_canvas {{
-                        width: 100%;
-                        height: 650px;
-                        background-color: #0E1117;
-                        border: 1px solid #262730;
-                        border-radius: 8px;
-                    }}
-                </style>
-            </head>
-            <body>
-                <div id="network_canvas"></div>
-                <script type="text/javascript">
-                    const container = document.getElementById('network_canvas');
-                    const data = {{
-                        nodes: new vis.DataSet({nodes_json}),
-                        edges: new vis.DataSet({edges_json})
-                    }};
-                    
-                    const options = {{
-                        nodes: {{
-                            shape: 'dot',
-                            shadow: true
-                        }},
-                        edges: {{
-                            width: 2,
-                            shadow: true
-                        }},
-                        physics: {{
-                            stabilization: false,
-                            barnesHut: {{
-                                gravitationalConstant: -3000,
-                                centralGravity: 0.2,
-                                springLength: 95,
-                                springConstant: 0.04,
-                                damping: 0.09
-                            }}
-                        }},
-                        interaction: {{
-                            hover: true,
-                            dragNodes: true,
-                            zoomView: true,
-                            dragView: true
-                        }}
-                    }};
-                    
-                    const network = new vis.Network(container, data, options);
-                </script>
-            </body>
-            </html>
-            """
+            # --- PATHFINDING TRACE LOGIC ---
+            shortest_path_nodes = []
+            shortest_path_edges = set()
+            if active_sc == search_target_sc and path_start_global and path_end_global and path_start_global != path_end_global:
+                try:
+                    shortest_path_nodes = nx.shortest_path(G_active, source=path_start_global, target=path_end_global)
+                    for i in range(len(shortest_path_nodes) - 1):
+                        shortest_path_edges.add((shortest_path_nodes[i], shortest_path_nodes[i+1]))
+                        shortest_path_edges.add((shortest_path_nodes[i+1], shortest_path_nodes[i]))
+                    st.success(f"⛓️ **Route Found:** " + " ➔ ".join([f"**@{n}**" if active_sc == "Scenario Beta" else f"**{n}**" for n in shortest_path_nodes]))
+                except nx.NetworkXNoPath:
+                    st.error("❌ No path connects these nodes.")
+
+            # Metrics Display
+            sm1, sm2, sm3 = st.columns(3)
+            sm1.metric("Total Profile Nodes" if active_sc == "Scenario Beta" else "Active Nodes", len(G_active.nodes()))
+            sm2.metric("Total Link Connections", len(G_active.edges()))
+            sm3.metric("Isolated Social Islands", nx.number_connected_components(G_active))
+
+            # --- PLOTLY 3D GRAPH ASSEMBLY ---
+            data_traces = []
+            edge_x, edge_y, edge_z = [], [], []
+            path_edge_x, path_edge_y, path_edge_z = [], [], []
             
-            # Embed the self-sustaining vis.js system directly into the right panel column
-            components.html(vis_html, height=660)
+            for u, v in G_active.edges():
+                x0, y0, z0 = pos_active[u]
+                x1, y1, z1 = pos_active[v]
+                if (u, v) in shortest_path_edges:
+                    path_edge_x.extend([x0, x1, None])
+                    path_edge_y.extend([y0, y1, None])
+                    path_edge_z.extend([z0, z1, None])
+                else:
+                    edge_x.extend([x0, x1, None])
+                    edge_y.extend([y0, y1, None])
+                    edge_z.extend([z0, z1, None])
+
+            if edge_x: data_traces.append(go.Scatter3d(x=edge_x, y=edge_y, z=edge_z, line=dict(width=2, color=edge_color_global), hoverinfo='none', mode='lines'))
+            if path_edge_x: data_traces.append(go.Scatter3d(x=path_edge_x, y=path_edge_y, z=path_edge_z, line=dict(width=6, color="#FF3333"), mode='lines'))
+
+            node_x, node_y, node_z, node_text, node_colors, custom_sizes, border_colors = [], [], [], [], [], [], []
+            
+            for node in G_active.nodes():
+                x, y, z = pos_active[node]
+                node_x.append(x)
+                node_y.append(y)
+                node_z.append(z)
+                deg = G_active.degree(node)
+                node_colors.append(deg)
+                
+                if active_sc == "Scenario Beta" and node != "Jinan":
+                    node_text.append(f"<b>IG Handle:</b> @{node}<br><b>Connections:</b> {deg}<br>🔗 <i>Expand cross-references below</i>")
+                else:
+                    node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}")
+                
+                if active_sc == search_target_sc and node == target_pinpoint_global:
+                    custom_sizes.append(node_size_global * 2.2)
+                    border_colors.append("#00FFFF")
+                elif active_sc == search_target_sc and node in shortest_path_nodes:
+                    custom_sizes.append(node_size_global * 1.5)
+                    border_colors.append("#FF3333")
+                else:
+                    custom_sizes.append(node_size_global)
+                    border_colors.append("#FFFFFF")
+
+            if node_x:
+                node_trace = go.Scatter3d(
+                    x=node_x, y=node_y, z=node_z, mode='markers', hovertext=node_text, hoverinfo='text',
+                    marker=dict(showscale=True, colorscale=color_theme, color=node_colors, size=custom_sizes, line=dict(width=1.5, color=border_colors))
+                )
+                data_traces.append(node_trace)
+
+            layout_active = go.Layout(
+                height=800, showlegend=False,
+                scene=dict(xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                           yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                           zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title='')),
+                margin=dict(l=0, r=0, b=0, t=0), hovermode='closest'
+            )
+            
+            fig_active = go.Figure(data=data_traces, layout=layout_active)
+            st.plotly_chart(fig_active, use_container_width=True, key=f"chart_{active_sc}")
             
             # --- DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
-            if active_sc == "Scenario Beta" and len(st.session_state[f"people_{active_sc}"]) > 1:
+            if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
                 st.markdown("### 🔍 Profile Reconnaissance Dashboard")
                 
                 dash_col1, dash_col2 = st.columns(2)
-                sorted_profiles = sorted([n for n in st.session_state[f"people_{active_sc}"] if n != "Jinan"])
+                sorted_profiles = sorted([n for n in G_active.nodes() if n != "Jinan"])
                 
                 for idx, n in enumerate(sorted_profiles):
                     target_column = dash_col1 if idx % 2 == 0 else dash_col2
@@ -273,3 +309,5 @@ for index, tab_object in enumerate(tabs):
                             with btn_web:
                                 web_recon_url = f"https://www.google.com/search?q=%22{encoded_handle}%22+site:linkedin.com+OR+site:instagram.com"
                                 st.link_button("🌐 Web Footprints", web_recon_url, use_container_width=True)
+                                
+                            st.caption("💡 *Tip: Check if the LinkedIn profile matches the structural bio text or location details seen on their Instagram.*")
