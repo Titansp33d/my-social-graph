@@ -3,6 +3,7 @@ import networkx as nx
 import plotly.graph_objects as go
 import json
 import os
+import csv
 import urllib.parse
 import streamlit.components.v1 as components
 
@@ -15,7 +16,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Complete Controls Restored:** Toggle auto-rotation or go into true **Fullscreen Mode** using the floating action buttons on the bottom left.
+* **Intelligent Ingestion Engine Active:** The ingestion system automatically normalizes unstructured text paste, CSV columns, or JSON arrays into clean nodes.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -95,19 +96,63 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
-            # --- SCENARIO BETA: GLOBAL BASE BULK IMPORT ENGINE ---
+            # --- SCENARIO BETA: UPGRADED SMART DATA INGESTION ENGINE ---
             if active_sc == "Scenario Beta":
-                st.markdown("#### 🚀 Global Instagram Importer (Add your main followers)")
-                bulk_input = st.text_area("Paste raw text list here:", height=90, key="global_bulk_import_area")
+                st.markdown("#### 🚀 Intelligent Data Ingestion Engine")
                 
-                if st.button("Automate Main Population", use_container_width=True):
-                    raw_tokens = bulk_input.replace("\n", ",").replace(" ", ",").split(",")
-                    parsed_handles = []
-                    for token in raw_tokens:
-                        clean = token.strip().replace("@", "")
-                        if clean and clean not in parsed_handles:
-                            parsed_handles.append(clean)
-                    
+                import_mode = st.radio("Choose Input Method:", ["Raw Clipboard Paste", "File Upload (CSV/JSON/TXT)"], horizontal=True)
+                parsed_handles = []
+
+                if import_mode == "Raw Clipboard Paste":
+                    bulk_input = st.text_area("Paste unstructured text or platform data strings here:", height=120, key="global_bulk_import_area")
+                    if st.button("Process Clipboard Data", use_container_width=True):
+                        raw_tokens = bulk_input.replace("\n", ",").replace(" ", ",").split(",")
+                        for token in raw_tokens:
+                            clean = token.strip().replace("@", "")
+                            if clean.lower() in ["follow", "following", "requested", "remove", "verified", "profile", "posts", "followers", "message"]:
+                                continue
+                            if clean and all(c.isalnum() or c in "._" for c in clean):
+                                if clean not in parsed_handles:
+                                    parsed_handles.append(clean)
+
+                else:
+                    uploaded_file = st.file_uploader("Upload Data Sheet", type=["csv", "json", "txt"])
+                    if uploaded_file is not None:
+                        file_contents = uploaded_file.read().decode("utf-8", errors="ignore")
+                        
+                        if uploaded_file.name.endswith(".json"):
+                            try:
+                                data_obj = json.loads(file_contents)
+                                # Handles array of strings or object structures
+                                if isinstance(data_obj, list):
+                                    for item in data_obj:
+                                        if isinstance(item, str): parsed_handles.append(item.replace("@", "").strip())
+                                elif isinstance(data_obj, dict):
+                                    # Look for typical relational lists
+                                    for key in ["users", "profiles", "relationships", "followers"]:
+                                        if key in data_obj and isinstance(data_obj[key], list):
+                                            for entry in data_obj[key]:
+                                                if isinstance(entry, str): parsed_handles.append(entry.replace("@", "").strip())
+                                                elif isinstance(entry, dict) and "username" in entry: parsed_handles.append(str(entry["username"]))
+                            except:
+                                st.error("Malformed JSON structure.")
+                                
+                        elif uploaded_file.name.endswith(".csv"):
+                            reader = csv.reader(file_contents.splitlines())
+                            for row in reader:
+                                for cell in row:
+                                    clean = cell.strip().replace("@", "")
+                                    if clean and not clean.replace(".","").replace("_","").isalnum(): continue
+                                    if clean and clean.lower() not in ["username", "handle", "id", "name"]:
+                                        parsed_handles.append(clean)
+                                        
+                        else: # TXT fallthrough parsing line by line
+                            for line in file_contents.splitlines():
+                                clean = line.strip().replace("@", "")
+                                if clean and all(c.isalnum() or c in "._" for c in clean):
+                                    parsed_handles.append(clean)
+
+                if st.button("Run Smart Aggregation", use_container_width=True) if import_mode == "File Upload (CSV/JSON/TXT)" else False or len(parsed_handles) > 0:
                     if parsed_handles:
                         current_jinan_connections = st.session_state[f"friends_{active_sc}"].get("Jinan", "")
                         existing_list = [f.strip() for f in current_jinan_connections.split(",") if f.strip()]
@@ -121,7 +166,7 @@ for index, tab_object in enumerate(tabs):
                         
                         st.session_state[f"friends_{active_sc}"]["Jinan"] = ", ".join(existing_list)
                         save_persisted_data()
-                        st.success(f"Successfully processed and mapped {len(parsed_handles)} profiles!")
+                        st.success(f"Successfully filtered noise and appended {len(parsed_handles)} profiles!")
                         st.rerun()
                 st.markdown("---")
 
@@ -300,7 +345,6 @@ for index, tab_object in enumerate(tabs):
                     body, html {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0E1117; font-family: system-ui, sans-serif; }}
                     #render_box {{ width: 100%; height: 100%; position: relative; }}
                     
-                    /* Wrapper panel for HUD actions */
                     #hud_panel {{
                         position: absolute;
                         bottom: 25px;
@@ -332,7 +376,6 @@ for index, tab_object in enumerate(tabs):
                         border-color: rgba(255, 255, 255, 0.3);
                     }}
                     
-                    /* Fix layout metrics when full screen mode triggers */
                     :-webkit-full-screen #render_box {{ height: 100vh; }}
                     :-moz-full-screen #render_box {{ height: 100vh; }}
                     :fullscreen #render_box {{ height: 100vh; }}
@@ -377,14 +420,13 @@ for index, tab_object in enumerate(tabs):
                     function toggleFullscreen() {{
                         if (!document.fullscreenElement) {{
                             containerBox.requestFullscreen().catch(err => {{
-                                alert(`Error attempting to enable full-screen mode: ${{err.message}}`);
+                                alert(`Error enabling full-screen: ${{err.message}}`);
                             }});
                         }} else {{
                             document.exitFullscreen();
                         }}
                     }}
                     
-                    // Automatically trigger an axis resize calculation if expanding screen geometry changes
                     document.addEventListener('fullscreenchange', () => {{
                         Plotly.Plots.resize(chartDomNode);
                     }});
