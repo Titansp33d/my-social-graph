@@ -15,7 +15,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Dynamic Auto-Orbit:** The camera automatically resumes rotating even after changing colors or resizing nodes.
+* **Isolated Animation Sandbox:** The entire Plotly engine runs directly alongside the JavaScript rotator inside a secure browser frame to ensure flawless automatic camera orbiting.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -274,70 +274,70 @@ for index, tab_object in enumerate(tabs):
                 data_traces.append(node_trace)
 
             layout_active = go.Layout(
-                height=800, showlegend=False,
+                height=760, showlegend=False,
                 scene=dict(
                     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
                     yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
                     zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
                     camera=dict(eye=dict(x=1.5, y=1.5, z=1.0))
                 ),
+                paper_bgcolor='#0E1117', plot_bgcolor='#0E1117',
                 margin=dict(l=0, r=0, b=0, t=0), hovermode='closest'
             )
             
             fig_active = go.Figure(data=data_traces, layout=layout_active)
             
-            st.plotly_chart(fig_active, use_container_width=True, key=f"canvas_system_{active_sc.replace(' ', '_')}")
+            # --- CONVERT GRAPH TO BRICK-WALL SECURE HTML STRING ---
+            # Extract raw underlying configuration dict structures to build clean raw javascript injection variables
+            fig_json = fig_active.to_json()
+            unique_id_tag = f"plot_{active_sc.replace(' ', '_')}"
             
-            # --- IMMUNE INSIDE-OUT JS ROTATION INJECTION ---
-            components.html(
-                f"""
+            sandbox_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+                <style>
+                    body, html {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0E1117; }}
+                    #render_box {{ width: 100%; height: 760px; }}
+                </style>
+            </head>
+            <body>
+                <div id="{unique_id_tag}"></div>
                 <script>
-                (function() {{
-                    const parentDoc = window.parent.document;
+                    const plotData = {fig_json};
+                    const chartDomNode = document.getElementById('{unique_id_tag}');
+                    
+                    // Render layout natively inside the unified sandbox
+                    Plotly.newPlot(chartDomNode, plotData.data, plotData.layout, {{responsive: true, displayModeBar: true}});
+                    
                     let radAngle = 0;
-                    const radius = 1.7;
-                    let targetPlot = null;
-
-                    function findActivePlot() {{
-                        const plots = parentDoc.querySelectorAll('.js-plotly-plot');
-                        if (plots && plots.length > 0) {{
-                            for (let i = 0; i < plots.length; i++) {{
-                                if (plots[i].id && plots[i].id.includes('{active_sc.replace(' ', '_')}')) {{
-                                    targetPlot = plots[i];
-                                    return;
-                                }}
-                            }}
-                            targetPlot = plots[plots.length - 1];
+                    const radius = 1.7; // Visual tracking distance
+                    
+                    function runCameraOrbitLoop() {{
+                        radAngle += 0.003; // Smooth animation speed step variable
+                        const nextX = radius * Math.cos(radAngle);
+                        const nextY = radius * Math.sin(radAngle);
+                        
+                        try {{
+                            Plotly.relayout(chartDomNode, {{
+                                'scene.camera.eye': {{ x: nextX, y: nextY, z: 1.0 }}
+                            }});
+                        }} catch(err) {{
+                            // Dropping frame render processing gracefully if user is clicking around elements
                         }}
+                        requestAnimationFrame(runCameraOrbitLoop);
                     }}
-
-                    function performOrbitStep() {{
-                        if (!targetPlot || !parentDoc.body.contains(targetPlot)) {{
-                            findActivePlot();
-                        }}
-
-                        if (targetPlot && typeof window.parent.Plotly !== 'undefined') {{
-                            radAngle += 0.003; 
-                            const newX = radius * Math.cos(radAngle);
-                            const newY = radius * Math.sin(radAngle);
-                            
-                            try {{
-                                window.parent.Plotly.relayout(targetPlot, {{
-                                    'scene.camera.eye': {{ x: newX, y: newY, z: 1.0 }}
-                                }});
-                            }} catch (e) {{
-                                // Drop frame if core loop is busy redrawing
-                            }}
-                        }}
-                        requestAnimationFrame(performOrbitStep);
-                    }}
-
-                    setTimeout(performOrbitStep, 400);
-                }})();
+                    
+                    // Allow graph instantiation rendering engine overhead brief window to settle before firing orbit
+                    setTimeout(runCameraOrbitLoop, 300);
                 </script>
-                """,
-                height=0
-            )
+            </body>
+            </html>
+            """
+            
+            # Mount our standalone component container frame onto Streamlit layout panel column
+            components.html(sandbox_html, height=770)
             
             # --- DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
             if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
