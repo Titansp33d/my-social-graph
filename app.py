@@ -15,7 +15,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Orbit Controls Connected:** Use the floating button on the bottom left of the graph to toggle between auto-rotation and manual mouse control.
+* **Complete Controls Restored:** Toggle auto-rotation or go into true **Fullscreen Mode** using the floating action buttons on the bottom left.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -287,7 +287,7 @@ for index, tab_object in enumerate(tabs):
             
             fig_active = go.Figure(data=data_traces, layout=layout_active)
             
-            # --- CONVERT GRAPH TO HTML STRING WITH CONTROL HUD ---
+            # --- CONVERT GRAPH TO HTML STRING WITH CONTROLS ---
             fig_json = fig_active.to_json()
             unique_id_tag = f"plot_{active_sc.replace(' ', '_')}"
             
@@ -298,16 +298,22 @@ for index, tab_object in enumerate(tabs):
                 <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
                 <style>
                     body, html {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0E1117; font-family: system-ui, sans-serif; }}
-                    #render_box {{ width: 100%; height: 760px; position: relative; }}
+                    #render_box {{ width: 100%; height: 100%; position: relative; }}
                     
-                    #control_hud {{
+                    /* Wrapper panel for HUD actions */
+                    #hud_panel {{
                         position: absolute;
                         bottom: 25px;
                         left: 25px;
                         z-index: 9999;
-                        background: rgba(38, 41, 50, 0.85);
+                        display: flex;
+                        gap: 10px;
+                    }}
+                    
+                    .hud_btn {{
+                        background: rgba(38, 41, 50, 0.9);
                         border: 1px solid rgba(255, 255, 255, 0.15);
-                        padding: 8px 14px;
+                        padding: 10px 16px;
                         border-radius: 8px;
                         color: white;
                         cursor: pointer;
@@ -316,32 +322,38 @@ for index, tab_object in enumerate(tabs):
                         display: flex;
                         align-items: center;
                         gap: 6px;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
                         transition: all 0.2s ease;
                         user-select: none;
                     }}
-                    #control_hud:hover {{
-                        background: rgba(255, 255, 255, 0.1);
+                    
+                    .hud_btn:hover {{
+                        background: rgba(255, 255, 255, 0.15);
                         border-color: rgba(255, 255, 255, 0.3);
                     }}
+                    
+                    /* Fix layout metrics when full screen mode triggers */
+                    :-webkit-full-screen #render_box {{ height: 100vh; }}
+                    :-moz-full-screen #render_box {{ height: 100vh; }}
+                    :fullscreen #render_box {{ height: 100vh; }}
                 </style>
             </head>
             <body>
                 <div id="render_box">
-                    <div id="control_hud" onclick="toggleOrbit()">⏸️ Pause Auto-Orbit</div>
+                    <div id="hud_panel">
+                        <div id="control_orbit_btn" class="hud_btn" onclick="toggleOrbit()">⏸️ Pause Auto-Orbit</div>
+                        <div id="control_fs_btn" class="hud_btn" onclick="toggleFullscreen()">🎵 View Fullscreen</div>
+                    </div>
                     <div id="{unique_id_tag}" style="width: 100%; height: 100%;"></div>
                 </div>
                 
                 <script>
                     const plotData = {fig_json};
                     const chartDomNode = document.getElementById('{unique_id_tag}');
-                    const hudButton = document.getElementById('control_hud');
+                    const orbitBtn = document.getElementById('control_orbit_btn');
+                    const containerBox = document.getElementById('render_box');
                     
-                    // Passing modeBarButtonsToAdd activates the internal fullscreen toggle on the Plotly bar
-                    Plotly.newPlot(chartDomNode, plotData.data, plotData.layout, {{
-                        responsive: true, 
-                        displayModeBar: true
-                    }});
+                    Plotly.newPlot(chartDomNode, plotData.data, plotData.layout, {{responsive: true, displayModeBar: true}});
                     
                     let radAngle = 0;
                     const radius = 1.7; 
@@ -350,18 +362,33 @@ for index, tab_object in enumerate(tabs):
                     function toggleOrbit() {{
                         isOrbiting = !isOrbiting;
                         if(isOrbiting) {{
-                            hudButton.innerHTML = "⏸️ Pause Auto-Orbit";
-                            hudButton.style.color = "white";
+                            orbitBtn.innerHTML = "⏸️ Pause Auto-Orbit";
+                            orbitBtn.style.color = "white";
                             try {{
                                 const currentEye = chartDomNode._fullLayout.scene.camera.eye;
                                 radAngle = Math.atan2(currentEye.y, currentEye.x);
                             }} catch(e) {{}}
                         }} else {{
-                            hudButton.innerHTML = "▶️ Resume Auto-Orbit (Manual Mode Active)";
-                            hudButton.style.color = "#00FFFF";
+                            orbitBtn.innerHTML = "▶️ Resume Auto-Orbit (Manual Mode Active)";
+                            orbitBtn.style.color = "#00FFFF";
                         }}
                     }}
                     
+                    function toggleFullscreen() {{
+                        if (!document.fullscreenElement) {{
+                            containerBox.requestFullscreen().catch(err => {{
+                                alert(`Error attempting to enable full-screen mode: ${{err.message}}`);
+                            }});
+                        }} else {{
+                            document.exitFullscreen();
+                        }}
+                    }}
+                    
+                    // Automatically trigger an axis resize calculation if expanding screen geometry changes
+                    document.addEventListener('fullscreenchange', () => {{
+                        Plotly.Plots.resize(chartDomNode);
+                    }});
+
                     function runCameraOrbitLoop() {{
                         if (isOrbiting) {{
                             radAngle += 0.003; 
