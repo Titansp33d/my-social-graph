@@ -15,7 +15,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Automated View Angle:** The web browser will attempt to rotate the viewport camera around the static 3D layout smoothly.
+* **Dynamic Auto-Orbit:** The camera automatically resumes rotating even after changing colors or resizing nodes.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -125,7 +125,7 @@ for index, tab_object in enumerate(tabs):
                         st.rerun()
                 st.markdown("---")
 
-            # --- DYNAMIC RELATIONSHIP BOX GENERATION + LOCAL MINI BULK IMPORTERS ---
+            # --- DYNAMIC RELATIONSHIP BOX GENERATION ---
             current_people = list(st.session_state[f"people_{active_sc}"])
             state_mutated = False
 
@@ -198,7 +198,7 @@ for index, tab_object in enumerate(tabs):
                     if G_active.has_node(person) and G_active.has_node(friend): G_active.add_edge(person, friend)
 
             if len(G_active.nodes()) > 0:
-                pos_active = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
+                pos_active = nx.frunning = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
             else:
                 pos_active = {}
 
@@ -286,48 +286,62 @@ for index, tab_object in enumerate(tabs):
             
             fig_active = go.Figure(data=data_traces, layout=layout_active)
             
-            chart_id = f"plotly_canvas_{active_sc.replace(' ', '_')}"
-            st.plotly_chart(fig_active, use_container_width=True, key=chart_id)
+            # Use a static chart key so the internal state persists predictably
+            st.plotly_chart(fig_active, use_container_width=True, key=f"canvas_system_{active_sc.replace(' ', '_')}")
             
-            # --- PERSISTENT BROWSER-SIDE CAMERA ROTATION ENGINE ---
+            # --- IMMUNE INSIDE-OUT JS ROTATION INJECTION ---
+            # By scanning for any '.js-plotly-plot' elements inside the parent container dynamically,
+            # this script re-targets whichever new chart Streamlit creates instantly.
             components.html(
                 f"""
                 <script>
-                const doc = window.parent.document;
-                
-                function initCameraOrbit() {{
-                    const chartWrapper = doc.querySelector('[data-testid="stPlotlyChart"]');
-                    if (!chartWrapper) {{
-                        setTimeout(initCameraOrbit, 300);
-                        return;
-                    }}
-                    
-                    const targetPlot = chartWrapper.querySelector('.js-plotly-plot');
-                    if (!targetPlot) {{
-                        setTimeout(initCameraOrbit, 300);
-                        return;
-                    }}
-
+                (function() {{
+                    const parentDoc = window.parent.document;
                     let radAngle = 0;
                     const radius = 1.7;
-                    
-                    function stepOrbit() {{
-                        radAngle += 0.002; 
-                        const newX = radius * Math.cos(radAngle);
-                        const newY = radius * Math.sin(radAngle);
-                        
-                        try {{
-                            window.parent.Plotly.relayout(targetPlot, {{
-                                'scene.camera.eye': {{ x: newX, y: newY, z: 1.0 }}
-                            }});
-                        }} catch(err) {{
-                            // Fail silently if chart is redrawing
+                    let targetPlot = null;
+
+                    function findActivePlot() {{
+                        // Look broadly across the parent window for the freshly generated plot canvas
+                        const plots = parentDoc.querySelectorAll('.js-plotly-plot');
+                        if (plots && plots.length > 0) {{
+                            // Tie onto the instance matching this layout tab block context
+                            for (let i = 0; i < plots.length; i++) {{
+                                if (plots[i].id && plots[i].id.includes('{active_sc.replace(' ', '_')}')) {{
+                                    targetPlot = plots[i];
+                                    return;
+                                }}
+                            }}
+                            // Fallback to latest active plot if ID routing hasn't fully registered
+                            targetPlot = plots[plots.length - 1];
                         }}
-                        requestAnimationFrame(stepOrbit);
                     }}
-                    stepOrbit();
-                }}
-                setTimeout(initCameraOrbit, 500);
+
+                    function performOrbitStep() {{
+                        // Check if chart has been swapped/redrawn out from under us
+                        if (!targetPlot || !parentDoc.body.contains(targetPlot)) {{
+                            findActivePlot();
+                        }}
+
+                        if (targetPlot && typeof window.parent.Plotly !== 'undefined') {{
+                            radAngle += 0.003; // Smooth orbital animation speed stepping
+                            const newX = radius * Math.cos(radAngle);
+                            const newY = radius * Math.sin(radAngle);
+                            
+                            try {{
+                                window.parent.Plotly.relayout(targetPlot, {{
+                                    'scene.camera.eye': {{ x: newX, y: newY, z: 1.0 }}
+                                }});
+                            }} catch (e) {{
+                                // Drop thread frame execution silently if rendering lock is busy
+                            }}
+                        }}
+                        requestAnimationFrame(performOrbitStep);
+                    }}
+
+                    // Fire setup sequence loop
+                    setTimeout(performOrbitStep, 400);
+                }})();
                 </script>
                 """,
                 height=0
