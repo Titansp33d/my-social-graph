@@ -13,10 +13,10 @@ SAVE_FILE = "network_data.json"
 # Set up page configuration
 st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 
-st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
+st.title("Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
-* **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Intelligent Ingestion Engine Active:** The ingestion system automatically normalizes unstructured text paste, CSV columns, or JSON arrays into clean nodes.
+* **Persistence Status:** Active. Changes are automatically serialized to `network_data.json`.
+* **Data Ingestion System:** Active. The ingestion engine standardizes unstructured text input, CSV columns, and JSON arrays into clean node entities.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -26,7 +26,7 @@ def load_persisted_data():
             with open(SAVE_FILE, "r") as f:
                 return json.load(f)
         except Exception as e:
-            st.sidebar.error(f"Error loading saved data: {e}")
+            st.sidebar.error(f"Error loading persisted data: {e}")
     return None
 
 def save_persisted_data():
@@ -40,7 +40,7 @@ def save_persisted_data():
         with open(SAVE_FILE, "w") as f:
             json.dump(data_to_save, f, indent=4)
     except Exception as e:
-        st.sidebar.error(f"Failed to auto-save to disk: {e}")
+        st.sidebar.error(f"Failed to execute auto-save to disk: {e}")
 
 # --- INITIALIZE OR RESTORE MEMORY ---
 saved_data = load_persisted_data()
@@ -60,24 +60,24 @@ for sc in scenarios:
             st.session_state[f"friends_{sc}"] = {"Jinan": ""}
 
 # --- GLOBAL VISUAL SYSTEM CONFIGURATION ---
-st.sidebar.header("🎨 Constellation Styling")
+st.sidebar.header("Constellation Styling")
 color_theme = st.sidebar.selectbox("Color Palette", ["Plasma", "Viridis", "Inferno", "Magma", "Cividis"])
 node_size_global = st.sidebar.slider("Node Display Radius", min_value=4, max_value=20, value=10, step=1)
 edge_color_global = st.sidebar.color_picker("Link Line Color", value="#888888")
 
 # --- SIDEBAR: SEARCH & PATHFINDING ---
 st.sidebar.markdown("---")
-with st.sidebar.expander("🔍 Search & Pathfinding Tools", expanded=False):
+with st.sidebar.expander("Search and Pathfinding Utilities", expanded=False):
     search_target_sc = st.selectbox("Select Scenario to Search:", options=scenarios, key="search_target_sc")
     all_active_nodes = sorted(list(st.session_state[f"people_{search_target_sc}"]))
     
-    target_pinpoint_global = st.selectbox("🎯 Pinpoint Node Location:", options=["None"] + all_active_nodes, key="global_pinpoint_select")
-    st.markdown("#### 🛣️ Friendship Route Finder")
-    path_start_global = st.selectbox("Start Person:", options=all_active_nodes, key="global_path_start")
-    path_end_global = st.selectbox("End Person:", options=all_active_nodes, key="global_path_end")
+    target_pinpoint_global = st.selectbox("Target Node Location Pinpoint:", options=["None"] + all_active_nodes, key="global_pinpoint_select")
+    st.markdown("#### Connection Route Finder")
+    path_start_global = st.selectbox("Origin Node:", options=all_active_nodes, key="global_path_start")
+    path_end_global = st.selectbox("Destination Node:", options=all_active_nodes, key="global_path_end")
 
 # --- MAIN WORKSPACE MULTI-TAB SCENARIOS ---
-tabs = st.tabs([f"👥 {sc}" for sc in scenarios])
+tabs = st.tabs([sc for sc in scenarios])
 
 for index, tab_object in enumerate(tabs):
     active_sc = scenarios[index]
@@ -88,7 +88,7 @@ for index, tab_object in enumerate(tabs):
         with col_entry:
             st.markdown(f"### {active_sc} Registry")
             
-            if st.button(f"Reset & Clear This Canvas", key=f"clear_{active_sc}", use_container_width=True):
+            if st.button(f"Reset and Clear Current Canvas", key=f"clear_{active_sc}", use_container_width=True):
                 st.session_state[f"people_{active_sc}"] = ["Jinan"]
                 st.session_state[f"friends_{active_sc}"] = {"Jinan": ""}
                 save_persisted_data()
@@ -96,11 +96,11 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
-            # --- SCENARIO BETA: UPGRADED SMART DATA INGESTION ENGINE ---
+            # --- SCENARIO BETA: DATA INGESTION ENGINE ---
             if active_sc == "Scenario Beta":
-                st.markdown("#### 🚀 Intelligent Data Ingestion Engine")
+                st.markdown("#### Structured Data Ingestion Engine")
                 
-                import_mode = st.radio("Choose Input Method:", ["Raw Clipboard Paste", "File Upload (CSV/JSON/TXT)"], horizontal=True)
+                import_mode = st.radio("Select Input Method:", ["Raw Clipboard Paste", "File Upload (CSV/JSON/TXT)"], horizontal=True)
                 parsed_handles = []
 
                 if import_mode == "Raw Clipboard Paste":
@@ -123,19 +123,17 @@ for index, tab_object in enumerate(tabs):
                         if uploaded_file.name.endswith(".json"):
                             try:
                                 data_obj = json.loads(file_contents)
-                                # Handles array of strings or object structures
                                 if isinstance(data_obj, list):
                                     for item in data_obj:
                                         if isinstance(item, str): parsed_handles.append(item.replace("@", "").strip())
                                 elif isinstance(data_obj, dict):
-                                    # Look for typical relational lists
                                     for key in ["users", "profiles", "relationships", "followers"]:
                                         if key in data_obj and isinstance(data_obj[key], list):
                                             for entry in data_obj[key]:
                                                 if isinstance(entry, str): parsed_handles.append(entry.replace("@", "").strip())
                                                 elif isinstance(entry, dict) and "username" in entry: parsed_handles.append(str(entry["username"]))
                             except:
-                                st.error("Malformed JSON structure.")
+                                st.error("Malformed JSON structure detected.")
                                 
                         elif uploaded_file.name.endswith(".csv"):
                             reader = csv.reader(file_contents.splitlines())
@@ -146,13 +144,13 @@ for index, tab_object in enumerate(tabs):
                                     if clean and clean.lower() not in ["username", "handle", "id", "name"]:
                                         parsed_handles.append(clean)
                                         
-                        else: # TXT fallthrough parsing line by line
+                        else:
                             for line in file_contents.splitlines():
                                 clean = line.strip().replace("@", "")
                                 if clean and all(c.isalnum() or c in "._" for c in clean):
                                     parsed_handles.append(clean)
 
-                if st.button("Run Smart Aggregation", use_container_width=True) if import_mode == "File Upload (CSV/JSON/TXT)" else False or len(parsed_handles) > 0:
+                if st.button("Run Data Aggregation", use_container_width=True) if import_mode == "File Upload (CSV/JSON/TXT)" else False or len(parsed_handles) > 0:
                     if parsed_handles:
                         current_jinan_connections = st.session_state[f"friends_{active_sc}"].get("Jinan", "")
                         existing_list = [f.strip() for f in current_jinan_connections.split(",") if f.strip()]
@@ -166,7 +164,7 @@ for index, tab_object in enumerate(tabs):
                         
                         st.session_state[f"friends_{active_sc}"]["Jinan"] = ", ".join(existing_list)
                         save_persisted_data()
-                        st.success(f"Successfully filtered noise and appended {len(parsed_handles)} profiles!")
+                        st.success(f"Noise filtered successfully. Appended {len(parsed_handles)} profiles.")
                         st.rerun()
                 st.markdown("---")
 
@@ -176,17 +174,17 @@ for index, tab_object in enumerate(tabs):
 
             for person in current_people:
                 current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
-                box_label = f"Mutual connections of @{person}" if active_sc == "Scenario Beta" else f"Friends of {person}"
+                box_label = f"Mutual connections of {person}" if active_sc == "Scenario Beta" else f"Connections of {person}"
                 
-                user_input = st.text_input(f"🔗 {box_label}:", value=current_val, key=f"input_{active_sc}_{person}")
+                user_input = st.text_input(f"Link: {box_label}:", value=current_val, key=f"input_{active_sc}_{person}")
                 
                 if user_input != current_val:
                     st.session_state[f"friends_{active_sc}"][person] = user_input
                     state_mutated = True
                 
-                with st.expander(f"📋 Bulk Text Importer for {person}", expanded=False):
+                with st.expander(f"Bulk Text Importer for {person}", expanded=False):
                     local_bulk_input = st.text_area("Paste copied text list for this individual here:", height=80, key=f"bulk_local_{active_sc}_{person}")
-                    if st.button("Process & Link Mutuals", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
+                    if st.button("Process and Link Mutual Connections", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
                         raw_tokens = local_bulk_input.replace("\n", ",").replace(" ", ",").split(",")
                         local_parsed = []
                         for token in raw_tokens:
@@ -256,9 +254,9 @@ for index, tab_object in enumerate(tabs):
                     for i in range(len(shortest_path_nodes) - 1):
                         shortest_path_edges.add((shortest_path_nodes[i], shortest_path_nodes[i+1]))
                         shortest_path_edges.add((shortest_path_nodes[i+1], shortest_path_nodes[i]))
-                    st.success(f"⛓️ **Route Found:** " + " ➔ ".join([f"**@{n}**" if active_sc == "Scenario Beta" else f"**{n}**" for n in shortest_path_nodes]))
+                    st.success("Route Found: " + " -> ".join([f"{n}" for n in shortest_path_nodes]))
                 except nx.NetworkXNoPath:
-                    st.error("❌ No path connects these nodes.")
+                    st.error("No path connects these nodes.")
 
             # Metrics Display
             sm1, sm2, sm3 = st.columns(3)
@@ -297,7 +295,7 @@ for index, tab_object in enumerate(tabs):
                 node_colors.append(deg)
                 
                 if active_sc == "Scenario Beta" and node != "Jinan":
-                    node_text.append(f"<b>IG Handle:</b> @{node}<br><b>Connections:</b> {deg}<br>🔗 <i>Expand cross-references below</i>")
+                    node_text.append(f"<b>Handle:</b> {node}<br><b>Connections:</b> {deg}<br><i>Expand cross-references below</i>")
                 else:
                     node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}")
                 
@@ -384,8 +382,8 @@ for index, tab_object in enumerate(tabs):
             <body>
                 <div id="render_box">
                     <div id="hud_panel">
-                        <div id="control_orbit_btn" class="hud_btn" onclick="toggleOrbit()">⏸️ Pause Auto-Orbit</div>
-                        <div id="control_fs_btn" class="hud_btn" onclick="toggleFullscreen()">🎵 View Fullscreen</div>
+                        <div id="control_orbit_btn" class="hud_btn" onclick="toggleOrbit()">Pause Auto-Orbit</div>
+                        <div id="control_fs_btn" class="hud_btn" onclick="toggleFullscreen()">View Fullscreen</div>
                     </div>
                     <div id="{unique_id_tag}" style="width: 100%; height: 100%;"></div>
                 </div>
@@ -405,14 +403,14 @@ for index, tab_object in enumerate(tabs):
                     function toggleOrbit() {{
                         isOrbiting = !isOrbiting;
                         if(isOrbiting) {{
-                            orbitBtn.innerHTML = "⏸️ Pause Auto-Orbit";
+                            orbitBtn.innerHTML = "Pause Auto-Orbit";
                             orbitBtn.style.color = "white";
                             try {{
                                 const currentEye = chartDomNode._fullLayout.scene.camera.eye;
                                 radAngle = Math.atan2(currentEye.y, currentEye.x);
                             }} catch(e) {{}}
                         }} else {{
-                            orbitBtn.innerHTML = "▶️ Resume Auto-Orbit (Manual Mode Active)";
+                            orbitBtn.innerHTML = "Resume Auto-Orbit (Manual Mode Active)";
                             orbitBtn.style.color = "#00FFFF";
                         }}
                     }}
@@ -456,7 +454,7 @@ for index, tab_object in enumerate(tabs):
             
             # --- DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
             if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
-                st.markdown("### 🔍 Profile Reconnaissance Dashboard")
+                st.markdown("### Profile Reference Dashboard")
                 
                 dash_col1, dash_col2 = st.columns(2)
                 sorted_profiles = sorted([n for n in G_active.nodes() if n != "Jinan"])
@@ -465,18 +463,18 @@ for index, tab_object in enumerate(tabs):
                     target_column = dash_col1 if idx % 2 == 0 else dash_col2
                     
                     with target_column:
-                        with st.expander(f"👤 @{n} (Verify Platform Footprint)", expanded=False):
+                        with st.expander(f"Profile: {n}", expanded=False):
                             encoded_handle = urllib.parse.quote(n)
-                            st.markdown(f"**Target Handle Reference:** `{n}`")
+                            st.markdown(f"**Target Identifier Reference:** `{n}`")
                             
                             btn_ig, btn_li, btn_web = st.columns(3)
                             with btn_ig:
-                                st.link_button("📸 Instagram", f"https://www.instagram.com/{encoded_handle}", use_container_width=True)
+                                st.link_button("Instagram", f"https://www.instagram.com/{encoded_handle}", use_container_width=True)
                             with btn_li:
                                 linkedin_search_url = f"https://www.linkedin.com/search/results/all/?keywords={encoded_handle}"
-                                st.link_button("💼 LinkedIn Match", linkedin_search_url, use_container_width=True)
+                                st.link_button("LinkedIn Match", linkedin_search_url, use_container_width=True)
                             with btn_web:
                                 web_recon_url = f"https://www.google.com/search?q=%22{encoded_handle}%22+site:linkedin.com+OR+site:instagram.com"
-                                st.link_button("🌐 Web Footprints", web_recon_url, use_container_width=True)
+                                st.link_button("Web Footprints", web_recon_url, use_container_width=True)
                                 
-                            st.caption("💡 *Tip: Check if the LinkedIn profile matches the structural bio text or location details seen on their Instagram.*")
+                            st.caption("Verify if cross-platform profiles correlate regarding bio data structural text or location markers.")
