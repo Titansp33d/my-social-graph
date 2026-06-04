@@ -350,7 +350,8 @@ for index, tab_object in enumerate(tabs):
                         line=dict(width=1.5, color=border_colors),
                         cmin=0.0,
                         cmax=1.0,
-                        colorbar=dict(title="Relative Density Weight", titleside="top", tickvals=[0, 0.5, 1.0], ticktext=["Low", "Medium", "Peak Hub"])
+                        # FIX: Nested title options inside a dictionary mapping structure to conform to standard Plotly compound rules
+                        colorbar=dict(title={"text": "Relative Density Weight", "side": "top"}, tickvals=[0, 0.5, 1.0], ticktext=["Low", "Medium", "Peak Hub"])
                     )
                 )
                 data_traces.append(node_trace)
