@@ -3,6 +3,7 @@ import networkx as nx
 import plotly.graph_objects as go
 import json
 import os
+import urllib.parse
 
 # Define the persistent storage file path
 SAVE_FILE = "network_data.json"
@@ -13,7 +14,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("🛰️ Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Active:** Changes are automatically saved to `network_data.json`.
-* **Bulk Importers Everywhere:** Use the global importer to add followers to Jinan, or use the mini-importers under individual profiles to rapidly map mutual connections!
+* **Cross-Platform OSINT Suite:** Expand the profile dropdowns below the chart to cross-reference Instagram handles against LinkedIn and web identities.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -138,7 +139,7 @@ for index, tab_object in enumerate(tabs):
                     st.session_state[f"friends_{active_sc}"][person] = user_input
                     state_mutated = True
                 
-                # Local Mini Bulk Text Area Expanesion for EVERY profile field
+                # Local Mini Bulk Text Area Expansion
                 with st.expander(f"📋 Bulk Text Importer for {person}", expanded=False):
                     local_bulk_input = st.text_area("Paste copied text list for this individual here:", height=80, key=f"bulk_local_{active_sc}_{person}")
                     if st.button("Process & Link Mutuals", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
@@ -253,7 +254,7 @@ for index, tab_object in enumerate(tabs):
                 node_colors.append(deg)
                 
                 if active_sc == "Scenario Beta" and node != "Jinan":
-                    node_text.append(f"<b>IG Handle:</b> @{node}<br><b>Connections:</b> {deg}<br>🔗 <i>Click button below to open profile</i>")
+                    node_text.append(f"<b>IG Handle:</b> @{node}<br><b>Connections:</b> {deg}<br>🔗 <i>Expand the Profile cross-reference dashboard below</i>")
                 else:
                     node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}")
                 
@@ -285,13 +286,52 @@ for index, tab_object in enumerate(tabs):
             fig_active = go.Figure(data=data_traces, layout=layout_active)
             st.plotly_chart(fig_active, use_container_width=True, key=f"chart_{active_sc}")
             
-            # Instagram Direct-Link Buttons
+            # --- UPGRADED: DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
             if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
-                st.markdown("### 📸 Open Profiles in Instagram")
-                cols = st.columns(min(len(G_active.nodes()) - 1, 5))
-                c_idx = 0
-                for n in G_active.nodes():
-                    if n != "Jinan":
-                        with cols[c_idx % len(cols)]:
-                            st.link_button(f"📸 @{n}", f"https://www.instagram.com/{n}", use_container_width=True)
-                        c_idx += 1
+                st.markdown("### 🔍 Profile Reconnaissance Dashboard")
+                st.caption("Expand any profile to run background cross-platform matches via handle footprint queries:")
+                
+                # Split profiles into neat 2-column masonry grids to look tidy
+                dash_col1, dash_col2 = st.columns(2)
+                sorted_profiles = sorted([n for n in G_active.nodes() if n != "Jinan"])
+                
+                for idx, n in enumerate(sorted_profiles):
+                    target_column = dash_col1 if idx % 2 == 0 else dash_col2
+                    
+                    with target_column:
+                        with st.expander(f"👤 @{n} (Verify Platform Footprint)", expanded=False):
+                            
+                            # Encode strings safely to keep URLs from breaking on spaces/special symbols
+                            encoded_handle = urllib.parse.quote(n)
+                            
+                            st.markdown(f"**Target Handle Reference:** `{n}`")
+                            
+                            # Platform Link Launchers
+                            btn_ig, btn_li, btn_web = st.columns(3)
+                            
+                            with btn_ig:
+                                st.link_button(
+                                    "📸 Instagram", 
+                                    f"https://www.instagram.com/{encoded_handle}", 
+                                    use_container_width=True
+                                )
+                            
+                            with btn_li:
+                                # Deep-link search directly querying LinkedIn's search layout for exact matches
+                                linkedin_search_url = f"https://www.linkedin.com/search/results/all/?keywords={encoded_handle}"
+                                st.link_button(
+                                    "💼 LinkedIn Match", 
+                                    linkedin_search_url, 
+                                    use_container_width=True
+                                )
+                                
+                            with btn_web:
+                                # Combined string search to locate profile pictures, identical handles, or common bios
+                                web_recon_url = f"https://www.google.com/search?q=%22{encoded_handle}%22+site:linkedin.com+OR+site:instagram.com"
+                                st.link_button(
+                                    "🌐 Web Footprints", 
+                                    web_recon_url, 
+                                    use_container_width=True
+                                )
+                                
+                            st.caption("💡 *Tip: Check if the LinkedIn profile matches the structural bio text or location details seen on their Instagram.*")
