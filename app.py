@@ -305,8 +305,9 @@ for index, tab_object in enumerate(tabs):
 
             node_x, node_y, node_z, node_text, node_colors, custom_sizes, border_colors = [], [], [], [], [], [], []
             
-            # Determine maximum connection limit inside the graph scenario to calculate relative density mapping
-            max_degree = max([G_active.degree(node) for node in G_active.nodes()]) if len(G_active.nodes()) > 0 else 1
+            # Safe calculation of relative density mapping to prevent ZeroDivisionError on canvas clear
+            raw_max = max([G_active.degree(node) for node in G_active.nodes()]) if len(G_active.nodes()) > 0 else 0
+            max_degree = raw_max if raw_max > 0 else 1
 
             for node in G_active.nodes():
                 x, y, z = pos_active[node]
@@ -315,8 +316,7 @@ for index, tab_object in enumerate(tabs):
                 node_z.append(z)
                 deg = G_active.degree(node)
                 
-                # RELATIVE SCALING: Nodes with higher connection density relative to others are exponentially 
-                # emphasized by dividing their degree by max_degree.
+                # Dynamic relative normalization mapping (0.0 - 1.0)
                 relative_density_weight = (deg / max_degree)
                 node_colors.append(relative_density_weight)
                 
@@ -325,12 +325,11 @@ for index, tab_object in enumerate(tabs):
                 else:
                     node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}<br><b>Relative Hub Weight:</b> {relative_density_weight:.2f}")
                 
-                # Apply high-contrast sizing to accounts with structural high density
+                # Apply high-contrast highlighting structure
                 if active_sc == search_target_sc and node == target_pinpoint_global:
                     custom_sizes.append(node_size_global * 2.5)
                     border_colors.append("#00FFFF")
-                elif deg == max_degree and max_degree > 1:
-                    # Automatically highlight peak density nodes with enhanced physical scaling
+                elif deg == raw_max and raw_max > 0:
                     custom_sizes.append(node_size_global * 1.8)
                     border_colors.append("#FFCC00")
                 elif active_sc == search_target_sc and node in shortest_path_nodes:
@@ -349,7 +348,6 @@ for index, tab_object in enumerate(tabs):
                         color=node_colors, 
                         size=custom_sizes, 
                         line=dict(width=1.5, color=border_colors),
-                        # Set absolute limits from 0.0 (low) to 1.0 (peak scenario hub density)
                         cmin=0.0,
                         cmax=1.0,
                         colorbar=dict(title="Relative Density Weight", titleside="top", tickvals=[0, 0.5, 1.0], ticktext=["Low", "Medium", "Peak Hub"])
