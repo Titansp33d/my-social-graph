@@ -273,19 +273,23 @@ for index, tab_object in enumerate(tabs):
                 )
                 data_traces.append(node_trace)
 
-            # --- NATIVE PLOTLY ANIMATION FRAME GENERATION ---
-            # Create a sequence of 60 unique camera frames mapped along a full 360-degree circle
+            # --- NATIVE PLOTLY ANIMATION FRAME GENERATION (WITH MATH SAFETY SAFEGUARDS) ---
             nb_frames = 60
             angles = np.linspace(0, 2 * np.pi, nb_frames, endpoint=False)
-            radius = 1.8
             
+            # If the graph has 0 or 1 nodes, fruchterman_reingold layout collapses to 0.
+            # We enforce a baseline radius so the camera always has a track to orbit on.
+            has_data = len(G_active.nodes()) > 1
+            radius = 1.8 if has_data else 2.5 
+            z_axis_height = 1.0 if has_data else 1.5
+
             graph_frames = []
             for t in angles:
                 cam_x = radius * np.cos(t)
                 cam_y = radius * np.sin(t)
                 graph_frames.append(
                     go.Frame(
-                        layout=dict(scene=dict(camera=dict(eye=dict(x=cam_x, y=cam_y, z=1.0))))
+                        layout=dict(scene=dict(camera=dict(eye=dict(x=cam_x, y=cam_y, z=z_axis_height))))
                     )
                 )
 
@@ -296,13 +300,13 @@ for index, tab_object in enumerate(tabs):
                     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
                     yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
                     zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
-                    camera=dict(eye=dict(x=radius * np.cos(0), y=radius * np.sin(0), z=1.0))
+                    camera=dict(eye=dict(x=radius * np.cos(0), y=radius * np.sin(0), z=z_axis_height))
                 ),
                 margin=dict(l=0, r=0, b=0, t=0), hovermode='closest',
                 updatemenus=[dict(
                     type="buttons",
                     showactive=False,
-                    x=0.05, y=0.05, # Place control menu subtly in the lower-left corner
+                    x=0.05, y=0.05, 
                     xanchor="left", yanchor="bottom",
                     pad=dict(t=0, r=10),
                     buttons=[
@@ -310,11 +314,11 @@ for index, tab_object in enumerate(tabs):
                             label="▶ Auto-Orbit",
                             method="animate",
                             args=[None, dict(
-                                frame=dict(duration=50, redraw=False), # Fast frame rendering loops
+                                frame=dict(duration=50, redraw=False), 
                                 fromcurrent=True,
                                 mode="immediate",
                                 transition=dict(duration=0, easing="linear"),
-                                loop=True # Keep looping continuously indefinitely
+                                loop=True 
                             )]
                         ),
                         dict(
