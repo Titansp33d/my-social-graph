@@ -16,7 +16,6 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Status:** Active. Changes are automatically serialized to `network_data.json`.
-* **Data Ingestion System:** Active. The ingestion engine standardizes unstructured text input, CSV columns, and JSON arrays into clean node entities.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -96,17 +95,17 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
-            # --- SCENARIO BETA: DATA INGESTION ENGINE ---
+            # --- SCENARIO BETA: DATA INGESTION ENGINE (UNHEADED) ---
             if active_sc == "Scenario Beta":
-                st.markdown("#### Structured Data Ingestion Engine")
-                
                 import_mode = st.radio("Select Input Method:", ["Raw Clipboard Paste", "File Upload (CSV/JSON/TXT)"], horizontal=True)
                 parsed_handles = []
 
                 if import_mode == "Raw Clipboard Paste":
                     bulk_input = st.text_area("Paste unstructured text or platform data strings here:", height=120, key="global_bulk_import_area")
                     if st.button("Process Clipboard Data", use_container_width=True):
-                        raw_tokens = bulk_input.replace("\n", ",").replace(" ", ",").split(",")
+                        # Tokenize by converting formatting boundaries to spaces
+                        normalized_text = bulk_input.replace("\n", " ").replace(",", " ")
+                        raw_tokens = normalized_text.split()
                         for token in raw_tokens:
                             clean = token.strip().replace("@", "")
                             if clean.lower() in ["follow", "following", "requested", "remove", "verified", "profile", "posts", "followers", "message"]:
@@ -146,9 +145,11 @@ for index, tab_object in enumerate(tabs):
                                         
                         else:
                             for line in file_contents.splitlines():
-                                clean = line.strip().replace("@", "")
-                                if clean and all(c.isalnum() or c in "._" for c in clean):
-                                    parsed_handles.append(clean)
+                                normalized_line = line.replace(",", " ")
+                                for token in normalized_line.split():
+                                    clean = token.strip().replace("@", "")
+                                    if clean and all(c.isalnum() or c in "._" for c in clean):
+                                        parsed_handles.append(clean)
 
                 if st.button("Run Data Aggregation", use_container_width=True) if import_mode == "File Upload (CSV/JSON/TXT)" else False or len(parsed_handles) > 0:
                     if parsed_handles:
@@ -157,7 +158,7 @@ for index, tab_object in enumerate(tabs):
                         
                         for handle in parsed_handles:
                             if handle not in st.session_state[f"people_{active_sc}"]:
-                                st.session_state[f"people_{active_sc}"].append(handle)
+                                st.session_state[f"people_{active_sc}/"].append(handle)
                                 st.session_state[f"friends_{active_sc}"][handle] = ""
                             if handle not in existing_list and handle != "Jinan":
                                 existing_list.append(handle)
@@ -185,10 +186,14 @@ for index, tab_object in enumerate(tabs):
                 with st.expander(f"Bulk Text Importer for {person}", expanded=False):
                     local_bulk_input = st.text_area("Paste copied text list for this individual here:", height=80, key=f"bulk_local_{active_sc}_{person}")
                     if st.button("Process and Link Mutual Connections", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
-                        raw_tokens = local_bulk_input.replace("\n", ",").replace(" ", ",").split(",")
+                        normalized_text = local_bulk_input.replace("\n", " ").replace(",", " ")
+                        raw_tokens = normalized_text.split()
+                        
                         local_parsed = []
                         for token in raw_tokens:
                             clean = token.strip().replace("@", "")
+                            if clean.lower() in ["follow", "following", "requested", "remove", "verified", "profile", "posts", "followers", "message"]:
+                                continue
                             if clean and clean not in local_parsed:
                                 local_parsed.append(clean)
                         
