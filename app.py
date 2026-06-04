@@ -198,7 +198,7 @@ for index, tab_object in enumerate(tabs):
                     if G_active.has_node(person) and G_active.has_node(friend): G_active.add_edge(person, friend)
 
             if len(G_active.nodes()) > 0:
-                pos_active = nx.frunning = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
+                pos_active = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
             else:
                 pos_active = {}
 
@@ -286,12 +286,9 @@ for index, tab_object in enumerate(tabs):
             
             fig_active = go.Figure(data=data_traces, layout=layout_active)
             
-            # Use a static chart key so the internal state persists predictably
             st.plotly_chart(fig_active, use_container_width=True, key=f"canvas_system_{active_sc.replace(' ', '_')}")
             
             # --- IMMUNE INSIDE-OUT JS ROTATION INJECTION ---
-            # By scanning for any '.js-plotly-plot' elements inside the parent container dynamically,
-            # this script re-targets whichever new chart Streamlit creates instantly.
             components.html(
                 f"""
                 <script>
@@ -302,29 +299,25 @@ for index, tab_object in enumerate(tabs):
                     let targetPlot = null;
 
                     function findActivePlot() {{
-                        // Look broadly across the parent window for the freshly generated plot canvas
                         const plots = parentDoc.querySelectorAll('.js-plotly-plot');
                         if (plots && plots.length > 0) {{
-                            // Tie onto the instance matching this layout tab block context
                             for (let i = 0; i < plots.length; i++) {{
                                 if (plots[i].id && plots[i].id.includes('{active_sc.replace(' ', '_')}')) {{
                                     targetPlot = plots[i];
                                     return;
                                 }}
                             }}
-                            // Fallback to latest active plot if ID routing hasn't fully registered
                             targetPlot = plots[plots.length - 1];
                         }}
                     }}
 
                     function performOrbitStep() {{
-                        // Check if chart has been swapped/redrawn out from under us
                         if (!targetPlot || !parentDoc.body.contains(targetPlot)) {{
                             findActivePlot();
                         }}
 
                         if (targetPlot && typeof window.parent.Plotly !== 'undefined') {{
-                            radAngle += 0.003; // Smooth orbital animation speed stepping
+                            radAngle += 0.003; 
                             const newX = radius * Math.cos(radAngle);
                             const newY = radius * Math.sin(radAngle);
                             
@@ -333,13 +326,12 @@ for index, tab_object in enumerate(tabs):
                                     'scene.camera.eye': {{ x: newX, y: newY, z: 1.0 }}
                                 }});
                             }} catch (e) {{
-                                // Drop thread frame execution silently if rendering lock is busy
+                                // Drop frame if core loop is busy redrawing
                             }}
                         }}
                         requestAnimationFrame(performOrbitStep);
                     }}
 
-                    // Fire setup sequence loop
                     setTimeout(performOrbitStep, 400);
                 }})();
                 </script>
