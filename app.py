@@ -95,15 +95,15 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
-            # --- SCENARIO BETA: DATA INGESTION ENGINE (UNHEADED) ---
+            # --- SCENARIO BETA: DATA INGESTION ENGINE ---
             if active_sc == "Scenario Beta":
                 import_mode = st.radio("Select Input Method:", ["Raw Clipboard Paste", "File Upload (CSV/JSON/TXT)"], horizontal=True)
+                run_ingestion = False
                 parsed_handles = []
 
                 if import_mode == "Raw Clipboard Paste":
                     bulk_input = st.text_area("Paste unstructured text or platform data strings here:", height=120, key="global_bulk_import_area")
                     if st.button("Process Clipboard Data", use_container_width=True):
-                        # Tokenize by converting formatting boundaries to spaces
                         normalized_text = bulk_input.replace("\n", " ").replace(",", " ")
                         raw_tokens = normalized_text.split()
                         for token in raw_tokens:
@@ -113,6 +113,8 @@ for index, tab_object in enumerate(tabs):
                             if clean and all(c.isalnum() or c in "._" for c in clean):
                                 if clean not in parsed_handles:
                                     parsed_handles.append(clean)
+                        if parsed_handles:
+                            run_ingestion = True
 
                 else:
                     uploaded_file = st.file_uploader("Upload Data Sheet", type=["csv", "json", "txt"])
@@ -150,23 +152,27 @@ for index, tab_object in enumerate(tabs):
                                     clean = token.strip().replace("@", "")
                                     if clean and all(c.isalnum() or c in "._" for c in clean):
                                         parsed_handles.append(clean)
+                        
+                        if st.button("Run Data Aggregation", use_container_width=True):
+                            if parsed_handles:
+                                run_ingestion = True
 
-                if st.button("Run Data Aggregation", use_container_width=True) if import_mode == "File Upload (CSV/JSON/TXT)" else False or len(parsed_handles) > 0:
-                    if parsed_handles:
-                        current_jinan_connections = st.session_state[f"friends_{active_sc}"].get("Jinan", "")
-                        existing_list = [f.strip() for f in current_jinan_connections.split(",") if f.strip()]
-                        
-                        for handle in parsed_handles:
-                            if handle not in st.session_state[f"people_{active_sc}"]:
-                                st.session_state[f"people_{active_sc}"].append(handle)
-                                st.session_state[f"friends_{active_sc}"][handle] = ""
-                            if handle not in existing_list and handle != "Jinan":
-                                existing_list.append(handle)
-                        
-                        st.session_state[f"friends_{active_sc}"]["Jinan"] = ", ".join(existing_list)
-                        save_persisted_data()
-                        st.success(f"Noise filtered successfully. Appended {len(parsed_handles)} profiles.")
-                        st.rerun()
+                # Permanent serialization block completely disjointed from frontend checks
+                if run_ingestion and parsed_handles:
+                    current_jinan_connections = st.session_state[f"friends_{active_sc}"].get("Jinan", "")
+                    existing_list = [f.strip() for f in current_jinan_connections.split(",") if f.strip()]
+                    
+                    for handle in parsed_handles:
+                        if handle not in st.session_state[f"people_{active_sc}"]:
+                            st.session_state[f"people_{active_sc}"].append(handle)
+                            st.session_state[f"friends_{active_sc}"][handle] = ""
+                        if handle not in existing_list and handle != "Jinan":
+                            existing_list.append(handle)
+                    
+                    st.session_state[f"friends_{active_sc}"]["Jinan"] = ", ".join(existing_list)
+                    save_persisted_data()
+                    st.success(f"Appended {len(parsed_handles)} profiles securely.")
+                    st.rerun()
                 st.markdown("---")
 
             # --- DYNAMIC RELATIONSHIP BOX GENERATION ---
