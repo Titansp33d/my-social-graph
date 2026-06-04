@@ -61,7 +61,7 @@ for sc in scenarios:
 # --- GLOBAL VISUAL SYSTEM CONFIGURATION ---
 st.sidebar.header("Constellation Styling")
 color_theme = st.sidebar.selectbox("Color Palette", ["Plasma", "Viridis", "Inferno", "Magma", "Cividis"])
-node_size_global = st.sidebar.slider("Node Display Radius", min_value=4, max_value=20, value=10, step=1)
+node_size_global = st.sidebar.slider("Node Base Radius", min_value=4, max_value=20, value=10, step=1)
 edge_color_global = st.sidebar.color_picker("Link Line Color", value="#888888")
 
 # --- SIDEBAR: SEARCH & PATHFINDING ---
@@ -325,18 +325,23 @@ for index, tab_object in enumerate(tabs):
                 else:
                     node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}<br><b>Relative Hub Weight:</b> {relative_density_weight:.2f}")
                 
-                # Apply high-contrast highlighting structure
+                # --- HIGH CONTRAST PHYSICAL SIZE SCALING & HIGHLIGHTS ---
                 if active_sc == search_target_sc and node == target_pinpoint_global:
-                    custom_sizes.append(node_size_global * 2.5)
+                    # Search pinpoint takes structural absolute priority
+                    custom_sizes.append(node_size_global * 3.0)
                     border_colors.append("#00FFFF")
-                elif deg == raw_max and raw_max > 0:
-                    custom_sizes.append(node_size_global * 1.8)
-                    border_colors.append("#FFCC00")
                 elif active_sc == search_target_sc and node in shortest_path_nodes:
-                    custom_sizes.append(node_size_global * 1.5)
+                    # Path trace nodes highlighted physically
+                    custom_sizes.append(node_size_global * 2.0)
                     border_colors.append("#FF3333")
+                elif deg == raw_max and raw_max > 0:
+                    # Absolute top-tier hub inside this canvas scenario
+                    custom_sizes.append(node_size_global * 2.5)
+                    border_colors.append("#FFCC00")
                 else:
-                    custom_sizes.append(node_size_global + (relative_density_weight * 8))
+                    # Exponential physical scaling based on connection density weight relative to maximum
+                    scaled_size = node_size_global + (relative_density_weight ** 2 * 24)
+                    custom_sizes.append(scaled_size)
                     border_colors.append("#FFFFFF")
 
             if node_x:
@@ -350,7 +355,6 @@ for index, tab_object in enumerate(tabs):
                         line=dict(width=1.5, color=border_colors),
                         cmin=0.0,
                         cmax=1.0,
-                        # FIX: Nested title options inside a dictionary mapping structure to conform to standard Plotly compound rules
                         colorbar=dict(title={"text": "Relative Density Weight", "side": "top"}, tickvals=[0, 0.5, 1.0], ticktext=["Low", "Medium", "Peak Hub"])
                     )
                 )
