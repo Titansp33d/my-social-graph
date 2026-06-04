@@ -300,7 +300,6 @@ for index, tab_object in enumerate(tabs):
                     body, html {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0E1117; font-family: system-ui, sans-serif; }}
                     #render_box {{ width: 100%; height: 760px; position: relative; }}
                     
-                    /* Styling the control HUD button */
                     #control_hud {{
                         position: absolute;
                         bottom: 25px;
@@ -338,18 +337,21 @@ for index, tab_object in enumerate(tabs):
                     const chartDomNode = document.getElementById('{unique_id_tag}');
                     const hudButton = document.getElementById('control_hud');
                     
-                    Plotly.newPlot(chartDomNode, plotData.data, plotData.layout, {{responsive: true, displayModeBar: true}});
+                    // Passing modeBarButtonsToAdd activates the internal fullscreen toggle on the Plotly bar
+                    Plotly.newPlot(chartDomNode, plotData.data, plotData.layout, {{
+                        responsive: true, 
+                        displayModeBar: true
+                    }});
                     
                     let radAngle = 0;
                     const radius = 1.7; 
-                    let isOrbiting = true; // State tracking variable
+                    let isOrbiting = true;
 
                     function toggleOrbit() {{
                         isOrbiting = !isOrbiting;
                         if(isOrbiting) {{
                             hudButton.innerHTML = "⏸️ Pause Auto-Orbit";
                             hudButton.style.color = "white";
-                            // Read current viewport angle when resuming to prevent snappy positioning jumps
                             try {{
                                 const currentEye = chartDomNode._fullLayout.scene.camera.eye;
                                 radAngle = Math.atan2(currentEye.y, currentEye.x);
