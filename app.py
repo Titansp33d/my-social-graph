@@ -66,45 +66,48 @@ edge_color_global = st.sidebar.color_picker("Link Line Color", value="#888888")
 
 # --- OPTION 2: SYNTHETIC / MOCK DATA GENERATOR ---
 st.sidebar.markdown("---")
-with st.sidebar.expander("🎲 Synthetic Network Generator", expanded=False):
-    target_sc_gen = st.selectbox("Target Scenario:", scenarios, key="opt2_sc_target")
-    generator_type = st.selectbox(
-        "Network Topology:", 
-        ["Scale-Free (Social Hubs)", "Small-World (Clusters)", "Random Mesh"],
-        key="opt2_topo_type"
-    )
-    num_nodes = st.slider("Node Count:", min_value=5, max_value=50, value=15, key="opt2_node_cnt")
-    
-    if st.button("Generate Synthetic Constellation", use_container_width=True, key="opt2_gen_btn"):
-        if generator_type == "Scale-Free (Social Hubs)":
-            m = min(2, num_nodes - 1)
-            synth_G = nx.barabasi_albert_graph(num_nodes, m, seed=42)
-        elif generator_type == "Small-World (Clusters)":
-            synth_G = nx.watts_strogatz_graph(num_nodes, k=min(4, num_nodes - 1), p=0.3, seed=42)
-        else:
-            synth_G = nx.erdos_renyi_graph(num_nodes, p=0.2, seed=42)
+enable_generator = st.sidebar.toggle("Enable Synthetic Generator", value=False, key="toggle_synth_gen")
 
-        node_names = [f"User_{i+1}" for i in range(num_nodes)]
-        st.session_state[f"people_{target_sc_gen}"] = node_names
+if enable_generator:
+    with st.sidebar.expander("🎲 Synthetic Network Generator", expanded=True):
+        target_sc_gen = st.selectbox("Target Scenario:", scenarios, key="opt2_sc_target")
+        generator_type = st.selectbox(
+            "Network Topology:", 
+            ["Scale-Free (Social Hubs)", "Small-World (Clusters)", "Random Mesh"],
+            key="opt2_topo_type"
+        )
+        num_nodes = st.slider("Node Count:", min_value=5, max_value=50, value=15, key="opt2_node_cnt")
         
-        friends_dict = {name: "" for name in node_names}
-        for u, v in synth_G.edges():
-            u_name, v_name = node_names[u], node_names[v]
-            
-            u_curr = [f.strip() for f in friends_dict[u_name].split(",") if f.strip()]
-            if v_name not in u_curr:
-                u_curr.append(v_name)
-            friends_dict[u_name] = ", ".join(u_curr)
-            
-            v_curr = [f.strip() for f in friends_dict[v_name].split(",") if f.strip()]
-            if u_name not in v_curr:
-                v_curr.append(u_name)
-            friends_dict[v_name] = ", ".join(v_curr)
+        if st.button("Generate Synthetic Constellation", use_container_width=True, key="opt2_gen_btn"):
+            if generator_type == "Scale-Free (Social Hubs)":
+                m = min(2, num_nodes - 1)
+                synth_G = nx.barabasi_albert_graph(num_nodes, m, seed=42)
+            elif generator_type == "Small-World (Clusters)":
+                synth_G = nx.watts_strogatz_graph(num_nodes, k=min(4, num_nodes - 1), p=0.3, seed=42)
+            else:
+                synth_G = nx.erdos_renyi_graph(num_nodes, p=0.2, seed=42)
 
-        st.session_state[f"friends_{target_sc_gen}"] = friends_dict
-        save_persisted_data()
-        st.success(f"Generated {num_nodes}-node synthetic network!")
-        st.rerun()
+            node_names = [f"User_{i+1}" for i in range(num_nodes)]
+            st.session_state[f"people_{target_sc_gen}"] = node_names
+            
+            friends_dict = {name: "" for name in node_names}
+            for u, v in synth_G.edges():
+                u_name, v_name = node_names[u], node_names[v]
+                
+                u_curr = [f.strip() for f in friends_dict[u_name].split(",") if f.strip()]
+                if v_name not in u_curr:
+                    u_curr.append(v_name)
+                friends_dict[u_name] = ", ".join(u_curr)
+                
+                v_curr = [f.strip() for f in friends_dict[v_name].split(",") if f.strip()]
+                if u_name not in v_curr:
+                    v_curr.append(u_name)
+                friends_dict[v_name] = ", ".join(v_curr)
+
+            st.session_state[f"friends_{target_sc_gen}"] = friends_dict
+            save_persisted_data()
+            st.success(f"Generated {num_nodes}-node synthetic network!")
+            st.rerun()
 
 # --- SIDEBAR: SEARCH & PATHFINDING ---
 st.sidebar.markdown("---")
