@@ -41,6 +41,19 @@ def save_persisted_data():
     except Exception as e:
         st.sidebar.error(f"Failed to execute auto-save to disk: {e}")
 
+def cleanup_synthetic_nodes():
+    """Purges all generated synthetic nodes ('User_*') from memory and storage."""
+    for sc in ["Scenario Alpha", "Scenario Beta", "Scenario Gamma"]:
+        peop = st.session_state.get(f"people_{sc}", [])
+        st.session_state[f"people_{sc}"] = [p for p in peop if not p.startswith("User_")]
+        
+        friends = st.session_state.get(f"friends_{sc}", {})
+        st.session_state[f"friends_{sc}"] = {
+            k: ", ".join([f.strip() for f in v.split(",") if f.strip() and not f.strip().startswith("User_")])
+            for k, v in friends.items() if not k.startswith("User_")
+        }
+    save_persisted_data()
+
 # --- INITIALIZE OR RESTORE MEMORY ---
 saved_data = load_persisted_data()
 scenarios = ["Scenario Alpha", "Scenario Beta", "Scenario Gamma"]
@@ -66,7 +79,12 @@ edge_color_global = st.sidebar.color_picker("Link Line Color", value="#888888")
 
 # --- OPTION 2: SYNTHETIC / MOCK DATA GENERATOR ---
 st.sidebar.markdown("---")
-enable_generator = st.sidebar.toggle("Enable Synthetic Generator", value=False, key="toggle_synth_gen")
+enable_generator = st.sidebar.toggle(
+    "Enable Synthetic Generator", 
+    value=False, 
+    key="toggle_synth_gen",
+    on_change=lambda: cleanup_synthetic_nodes() if not st.session_state.toggle_synth_gen else None
+)
 
 if enable_generator:
     with st.sidebar.expander("🎲 Synthetic Network Generator", expanded=True):
@@ -78,7 +96,8 @@ if enable_generator:
         )
         num_nodes = st.slider("Node Count:", min_value=5, max_value=50, value=15, key="opt2_node_cnt")
         
-        if st.button("Generate Synthetic Constellation", use_container_width=True, key="opt2_gen_btn"):
+        col_gen, col_clr = st.columns(2)
+        if col_gen.button("Generate", use_container_width=True, key="opt2_gen_btn"):
             if generator_type == "Scale-Free (Social Hubs)":
                 m = min(2, num_nodes - 1)
                 synth_G = nx.barabasi_albert_graph(num_nodes, m, seed=42)
@@ -88,25 +107,31 @@ if enable_generator:
                 synth_G = nx.erdos_renyi_graph(num_nodes, p=0.2, seed=42)
 
             node_names = [f"User_{i+1}" for i in range(num_nodes)]
-            st.session_state[f"people_{target_sc_gen}"] = node_names
             
-            friends_dict = {name: "" for name in node_names}
+            # Combine existing real people with synthetic ones
+            existing_people = [p for p in st.session_state[f"people_{target_sc_gen}"] if not p.startswith("User_")]
+            st.session_state[f"people_{target_sc_gen}"] = existing_people + node_names
+            
+            friends_dict = st.session_state[f"friends_{target_sc_gen}"]
             for u, v in synth_G.edges():
                 u_name, v_name = node_names[u], node_names[v]
                 
-                u_curr = [f.strip() for f in friends_dict[u_name].split(",") if f.strip()]
-                if v_name not in u_curr:
-                    u_curr.append(v_name)
+                u_curr = [f.strip() for f in friends_dict.get(u_name, "").split(",") if f.strip()]
+                if v_name not in u_curr: u_curr.append(v_name)
                 friends_dict[u_name] = ", ".join(u_curr)
                 
-                v_curr = [f.strip() for f in friends_dict[v_name].split(",") if f.strip()]
-                if u_name not in v_curr:
-                    v_curr.append(u_name)
+                v_curr = [f.strip() for f in friends_dict.get(v_name, "").split(",") if f.strip()]
+                if u_name not in v_curr: v_curr.append(u_name)
                 friends_dict[v_name] = ", ".join(v_curr)
 
             st.session_state[f"friends_{target_sc_gen}"] = friends_dict
             save_persisted_data()
             st.success(f"Generated {num_nodes}-node synthetic network!")
+            st.rerun()
+
+        if col_clr.button("Clear Synthetic", use_container_width=True, key="opt2_clr_btn"):
+            cleanup_synthetic_nodes()
+            st.success("Cleared synthetic nodes!")
             st.rerun()
 
 # --- SIDEBAR: SEARCH & PATHFINDING ---
