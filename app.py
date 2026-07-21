@@ -466,4 +466,179 @@ for index, tab_object in enumerate(tabs):
                         showscale=True, 
                         colorscale=color_theme, 
                         color=node_colors, 
-                        size=custom_
+                        size=custom_sizes, 
+                        line=dict(width=1.5, color=border_colors),
+                        cmin=0.0,
+                        cmax=1.0,
+                        colorbar=dict(
+                            title=dict(text="Relative Density Weight", side="top"),
+                            tickvals=[0, 0.5, 1.0],
+                            ticktext=["Low", "Medium", "Peak Hub"]
+                        )
+                    )
+                )
+                data_traces.append(node_trace)
+
+            layout_active = go.Layout(
+                height=760, showlegend=False,
+                scene=dict(
+                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                    zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
+                    camera=dict(eye=dict(x=1.5, y=1.5, z=1.0))
+                ),
+                paper_bgcolor='#0E1117', plot_bgcolor='#0E1117',
+                margin=dict(l=0, r=0, b=0, t=0), hovermode='closest'
+            )
+            
+            fig_active = go.Figure(data=data_traces, layout=layout_active)
+            
+            # --- CONVERT GRAPH TO HTML TEMPLATE ---
+            fig_json = fig_active.to_json()
+            unique_id_tag = f"plot_{active_sc.replace(' ', '_')}"
+            
+            template_html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+                <style>
+                    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0E1117; font-family: system-ui, sans-serif; }
+                    #render_box { width: 100%; height: 100%; position: relative; }
+                    
+                    #hud_panel {
+                        position: absolute;
+                        bottom: 25px;
+                        left: 25px;
+                        z-index: 9999;
+                        display: flex;
+                        gap: 10px;
+                    }
+                    
+                    .hud_btn {
+                        background: rgba(38, 41, 50, 0.9);
+                        border: 1px solid rgba(255, 255, 255, 0.15);
+                        padding: 10px 16px;
+                        border-radius: 8px;
+                        color: white;
+                        cursor: pointer;
+                        font-size: 13px;
+                        font-weight: 600;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                        transition: all 0.2s ease;
+                        user-select: none;
+                    }
+                    
+                    .hud_btn:hover {
+                        background: rgba(255, 255, 255, 0.15);
+                        border-color: rgba(255, 255, 255, 0.3);
+                    }
+                    
+                    :-webkit-full-screen #render_box { height: 100vh; }
+                    :-moz-full-screen #render_box { height: 100vh; }
+                    :fullscreen #render_box { height: 100vh; }
+                </style>
+            </head>
+            <body>
+                <div id="render_box">
+                    <div id="hud_panel">
+                        <div id="control_orbit_btn" class="hud_btn" onclick="toggleOrbit()">Pause Auto-Orbit</div>
+                        <div id="control_fs_btn" class="hud_btn" onclick="toggleFullscreen()">View Fullscreen</div>
+                    </div>
+                    <div id="__UNIQUE_ID__" style="width: 100%; height: 100%;"></div>
+                </div>
+                
+                <script>
+                    const plotData = __FIG_JSON__;
+                    const chartDomNode = document.getElementById('__UNIQUE_ID__');
+                    const orbitBtn = document.getElementById('control_orbit_btn');
+                    const containerBox = document.getElementById('render_box');
+                    
+                    Plotly.newPlot(chartDomNode, plotData.data, plotData.layout, {responsive: true, displayModeBar: true});
+                    
+                    let radAngle = 0;
+                    const radius = 1.7; 
+                    let isOrbiting = true;
+
+                    function toggleOrbit() {
+                        isOrbiting = !isOrbiting;
+                        if(isOrbiting) {
+                            orbitBtn.innerHTML = "Pause Auto-Orbit";
+                            orbitBtn.style.color = "white";
+                            try {
+                                const currentEye = chartDomNode._fullLayout.scene.camera.eye;
+                                radAngle = Math.atan2(currentEye.y, currentEye.x);
+                            } catch(e) {}
+                        } else {
+                            orbitBtn.innerHTML = "Resume Auto-Orbit (Manual Mode Active)";
+                            orbitBtn.style.color = "#00FFFF";
+                        }
+                    }
+                    
+                    function toggleFullscreen() {
+                        if (!document.fullscreenElement) {
+                            containerBox.requestFullscreen().catch(err => {
+                                alert(`Error enabling full-screen: ${err.message}`);
+                            });
+                        } else {
+                            document.exitFullscreen();
+                        }
+                    }
+                    
+                    document.addEventListener('fullscreenchange', () => {
+                        Plotly.Plots.resize(chartDomNode);
+                    });
+
+                    function runCameraOrbitLoop() {
+                        if (isOrbiting) {
+                            radAngle += 0.003; 
+                            const nextX = radius * Math.cos(radAngle);
+                            const nextY = radius * Math.sin(radAngle);
+                            
+                            try {
+                                Plotly.relayout(chartDomNode, {
+                                    'scene.camera.eye': { x: nextX, y: nextY, z: 1.0 }
+                                });
+                            } catch(err) {}
+                        }
+                        requestAnimationFrame(runCameraOrbitLoop);
+                    }
+                    
+                    setTimeout(runCameraOrbitLoop, 300);
+                </script>
+            </body>
+            </html>
+            """
+            
+            sandbox_html = template_html.replace("__UNIQUE_ID__", unique_id_tag).replace("__FIG_JSON__", fig_json)
+            components.html(sandbox_html, height=770)
+            
+            # --- DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
+            if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
+                st.markdown("### Profile Reference Dashboard")
+                
+                dash_col1, dash_col2 = st.columns(2)
+                sorted_profiles = sorted([n for n in G_active.nodes() if n != "Jinan"])
+                
+                for idx, n in enumerate(sorted_profiles):
+                    target_column = dash_col1 if idx % 2 == 0 else dash_col2
+                    
+                    with target_column:
+                        with st.expander(f"Profile: {n}", expanded=False):
+                            encoded_handle = urllib.parse.quote(n)
+                            st.markdown(f"**Target Identifier Reference:** `{n}`")
+                            
+                            btn_ig, btn_li, btn_web = st.columns(3)
+                            with btn_ig:
+                                st.link_button("Instagram", f"https://www.instagram.com/{encoded_handle}", use_container_width=True)
+                            with btn_li:
+                                linkedin_search_url = f"https://www.linkedin.com/search/results/all/?keywords={encoded_handle}"
+                                st.link_button("LinkedIn Match", linkedin_search_url, use_container_width=True)
+                            with btn_web:
+                                web_recon_url = f"https://www.google.com/search?q=%22{encoded_handle}%22+site:linkedin.com+OR+site:instagram.com"
+                                st.link_button("Web Footprints", web_recon_url, use_container_width=True)
+                                
+                            st.caption("Verify if cross-platform profiles correlate regarding bio data structural text or location markers.")
