@@ -64,6 +64,48 @@ color_theme = st.sidebar.selectbox("Color Palette", ["Plasma", "Viridis", "Infer
 node_size_global = st.sidebar.slider("Node Base Radius", min_value=4, max_value=20, value=10, step=1)
 edge_color_global = st.sidebar.color_picker("Link Line Color", value="#888888")
 
+# --- OPTION 2: SYNTHETIC / MOCK DATA GENERATOR ---
+st.sidebar.markdown("---")
+with st.sidebar.expander("🎲 Synthetic Network Generator", expanded=False):
+    target_sc_gen = st.selectbox("Target Scenario:", scenarios, key="opt2_sc_target")
+    generator_type = st.selectbox(
+        "Network Topology:", 
+        ["Scale-Free (Social Hubs)", "Small-World (Clusters)", "Random Mesh"],
+        key="opt2_topo_type"
+    )
+    num_nodes = st.slider("Node Count:", min_value=5, max_value=50, value=15, key="opt2_node_cnt")
+    
+    if st.button("Generate Synthetic Constellation", use_container_width=True, key="opt2_gen_btn"):
+        if generator_type == "Scale-Free (Social Hubs)":
+            m = min(2, num_nodes - 1)
+            synth_G = nx.barabasi_albert_graph(num_nodes, m, seed=42)
+        elif generator_type == "Small-World (Clusters)":
+            synth_G = nx.watts_strogatz_graph(num_nodes, k=min(4, num_nodes - 1), p=0.3, seed=42)
+        else:
+            synth_G = nx.erdos_renyi_graph(num_nodes, p=0.2, seed=42)
+
+        node_names = [f"User_{i+1}" for i in range(num_nodes)]
+        st.session_state[f"people_{target_sc_gen}"] = node_names
+        
+        friends_dict = {name: "" for name in node_names}
+        for u, v in synth_G.edges():
+            u_name, v_name = node_names[u], node_names[v]
+            
+            u_curr = [f.strip() for f in friends_dict[u_name].split(",") if f.strip()]
+            if v_name not in u_curr:
+                u_curr.append(v_name)
+            friends_dict[u_name] = ", ".join(u_curr)
+            
+            v_curr = [f.strip() for f in friends_dict[v_name].split(",") if f.strip()]
+            if u_name not in v_curr:
+                v_curr.append(u_name)
+            friends_dict[v_name] = ", ".join(v_curr)
+
+        st.session_state[f"friends_{target_sc_gen}"] = friends_dict
+        save_persisted_data()
+        st.success(f"Generated {num_nodes}-node synthetic network!")
+        st.rerun()
+
 # --- SIDEBAR: SEARCH & PATHFINDING ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("Search and Pathfinding Utilities", expanded=False):
@@ -95,6 +137,83 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
+            # --- OPTION 4: COLLABORATIVE / SURVEY INTAKE FORM ---
+            with st.expander("📋 Community Connection Survey Form", expanded=False):
+                st.markdown("#### Submit Your Network Node")
+                
+                with st.form(key=f"opt4_survey_form_{active_sc}"):
+                    user_name = st.text_input("Your Name / Handle:", placeholder="e.g. Alex").strip()
+                    knows_input = st.text_input("People in this network you interact with:", placeholder="e.g. Jinan, Sam, Jordan")
+                    connection_type = st.selectbox("Interaction Level:", ["Frequent Collaborator", "Casual Contact", "Project Member"])
+                    
+                    submit_button = st.form_submit_button("Submit Node Data", use_container_width=True)
+                    
+                    if submit_button and user_name:
+                        user_clean = user_name.replace("@", "")
+                        
+                        if user_clean not in st.session_state[f"people_{active_sc}"]:
+                            st.session_state[f"people_{active_sc}"].append(user_clean)
+                        
+                        known_list = [k.strip().replace("@", "") for k in knows_input.split(",") if k.strip()]
+                        existing_conn = [f.strip() for f in st.session_state[f"friends_{active_sc}"].get(user_clean, "").split(",") if f.strip()]
+                        
+                        for person in known_list:
+                            if person not in st.session_state[f"people_{active_sc}"]:
+                                st.session_state[f"people_{active_sc}"].append(person)
+                                st.session_state[f"friends_{active_sc}"][person] = ""
+                            if person not in existing_conn:
+                                existing_conn.append(person)
+                        
+                        st.session_state[f"friends_{active_sc}"][user_clean] = ", ".join(existing_conn)
+                        save_persisted_data()
+                        st.success(f"Added {user_clean}'s connections to {active_sc}!")
+                        st.rerun()
+
+            # --- OPTION 3: INTERACTION & MENTION GRAPH ENGINE ---
+            with st.expander("🏷️ Interaction & Mention Ingestion", expanded=False):
+                st.caption("Map nodes based on public tags, comments, or mention feeds.")
+                
+                api_source = st.radio("Data Source:", ["Manual Mention Log", "Graph API Ingestion (Stub)"], horizontal=True, key=f"opt3_src_{active_sc}")
+                
+                if api_source == "Manual Mention Log":
+                    mention_input = st.text_area(
+                        "Paste Mention Lines (e.g. 'alice -> bob, charlie'):",
+                        placeholder="alice -> bob, charlie\nbob -> charlie",
+                        height=100,
+                        key=f"opt3_mention_input_{active_sc}"
+                    )
+                    if st.button("Process Mention Network", use_container_width=True, key=f"opt3_btn_{active_sc}"):
+                        for line in mention_input.splitlines():
+                            if "->" in line:
+                                source, targets = line.split("->")
+                                src_clean = source.strip().replace("@", "")
+                                tgt_list = [t.strip().replace("@", "") for tt in targets.split(",") for t in tt.split()]
+                                
+                                if src_clean and src_clean not in st.session_state[f"people_{active_sc}"]:
+                                    st.session_state[f"people_{active_sc}"].append(src_clean)
+                                    st.session_state[f"friends_{active_sc}"][src_clean] = ""
+                                
+                                curr_friends = [f.strip() for f in st.session_state[f"friends_{active_sc}"].get(src_clean, "").split(",") if f.strip()]
+                                for tgt in tgt_list:
+                                    if tgt and tgt not in st.session_state[f"people_{active_sc}"]:
+                                        st.session_state[f"people_{active_sc}"].append(tgt)
+                                        st.session_state[f"friends_{active_sc}"][tgt] = ""
+                                    if tgt and tgt not in curr_friends:
+                                        curr_friends.append(tgt)
+                                
+                                st.session_state[f"friends_{active_sc}"][src_clean] = ", ".join(curr_friends)
+                        
+                        save_persisted_data()
+                        st.success("Interaction map updated!")
+                        st.rerun()
+                else:
+                    st.info("Requires `INSTAGRAM_BUSINESS_ACCOUNT_ID` and `ACCESS_TOKEN` configured in secrets.")
+                    st.text_input("Access Token", type="password", key=f"opt3_token_{active_sc}")
+                    if st.button("Fetch Public Mentions via Graph API", key=f"opt3_fetch_{active_sc}"):
+                        st.warning("Connect your Meta Developer Token above to run live query endpoints.")
+
+            st.markdown("---")
+
             # --- SCENARIO BETA: MAIN ROOT DATA INGESTION ENGINE ---
             if active_sc == "Scenario Beta":
                 import_mode = st.radio("Select Input Method:", ["Raw Clipboard Paste", "File Upload (CSV/JSON/TXT)"], horizontal=True)
@@ -305,7 +424,7 @@ for index, tab_object in enumerate(tabs):
 
             node_x, node_y, node_z, node_text, node_colors, custom_sizes, border_colors = [], [], [], [], [], [], []
             
-            # Safe calculation of relative density mapping to prevent ZeroDivisionError on canvas clear
+            # Safe calculation of relative density mapping
             raw_max = max([G_active.degree(node) for node in G_active.nodes()]) if len(G_active.nodes()) > 0 else 0
             max_degree = raw_max if raw_max > 0 else 1
 
@@ -325,21 +444,17 @@ for index, tab_object in enumerate(tabs):
                 else:
                     node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}<br><b>Relative Hub Weight:</b> {relative_density_weight:.2f}")
                 
-                # --- HIGH CONTRAST PHYSICAL SIZE SCALING & HIGHLIGHTS ---
+                # Dynamic Node Physical Scaling
                 if active_sc == search_target_sc and node == target_pinpoint_global:
-                    # Search pinpoint takes structural absolute priority
                     custom_sizes.append(node_size_global * 3.0)
                     border_colors.append("#00FFFF")
                 elif active_sc == search_target_sc and node in shortest_path_nodes:
-                    # Path trace nodes highlighted physically
                     custom_sizes.append(node_size_global * 2.0)
                     border_colors.append("#FF3333")
                 elif deg == raw_max and raw_max > 0:
-                    # Absolute top-tier hub inside this canvas scenario
                     custom_sizes.append(node_size_global * 2.5)
                     border_colors.append("#FFCC00")
                 else:
-                    # Exponential physical scaling based on connection density weight relative to maximum
                     scaled_size = node_size_global + (relative_density_weight ** 2 * 24)
                     custom_sizes.append(scaled_size)
                     border_colors.append("#FFFFFF")
@@ -351,174 +466,4 @@ for index, tab_object in enumerate(tabs):
                         showscale=True, 
                         colorscale=color_theme, 
                         color=node_colors, 
-                        size=custom_sizes, 
-                        line=dict(width=1.5, color=border_colors),
-                        cmin=0.0,
-                        cmax=1.0,
-                        colorbar=dict(title={"text": "Relative Density Weight", "side": "top"}, tickvals=[0, 0.5, 1.0], ticktext=["Low", "Medium", "Peak Hub"])
-                    )
-                )
-                data_traces.append(node_trace)
-
-            layout_active = go.Layout(
-                height=760, showlegend=False,
-                scene=dict(
-                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
-                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
-                    zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=''),
-                    camera=dict(eye=dict(x=1.5, y=1.5, z=1.0))
-                ),
-                paper_bgcolor='#0E1117', plot_bgcolor='#0E1117',
-                margin=dict(l=0, r=0, b=0, t=0), hovermode='closest'
-            )
-            
-            fig_active = go.Figure(data=data_traces, layout=layout_active)
-            
-            # --- CONVERT GRAPH TO HTML STRING WITH CONTROLS ---
-            fig_json = fig_active.to_json()
-            unique_id_tag = f"plot_{active_sc.replace(' ', '_')}"
-            
-            sandbox_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
-                <style>
-                    body, html {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0E1117; font-family: system-ui, sans-serif; }}
-                    #render_box {{ width: 100%; height: 100%; position: relative; }}
-                    
-                    #hud_panel {{
-                        position: absolute;
-                        bottom: 25px;
-                        left: 25px;
-                        z-index: 9999;
-                        display: flex;
-                        gap: 10px;
-                    }}
-                    
-                    .hud_btn {{
-                        background: rgba(38, 41, 50, 0.9);
-                        border: 1px solid rgba(255, 255, 255, 0.15);
-                        padding: 10px 16px;
-                        border-radius: 8px;
-                        color: white;
-                        cursor: pointer;
-                        font-size: 13px;
-                        font-weight: 600;
-                        display: flex;
-                        align-items: center;
-                        gap: 6px;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-                        transition: all 0.2s ease;
-                        user-select: none;
-                    }}
-                    
-                    .hud_btn:hover {{
-                        background: rgba(255, 255, 255, 0.15);
-                        border-color: rgba(255, 255, 255, 0.3);
-                    }}
-                    
-                    :-webkit-full-screen #render_box {{ height: 100vh; }}
-                    :-moz-full-screen #render_box {{ height: 100vh; }}
-                    :fullscreen #render_box {{ height: 100vh; }}
-                </style>
-            </head>
-            <body>
-                <div id="render_box">
-                    <div id="hud_panel">
-                        <div id="control_orbit_btn" class="hud_btn" onclick="toggleOrbit()">Pause Auto-Orbit</div>
-                        <div id="control_fs_btn" class="hud_btn" onclick="toggleFullscreen()">View Fullscreen</div>
-                    </div>
-                    <div id="{unique_id_tag}" style="width: 100%; height: 100%;"></div>
-                </div>
-                
-                <script>
-                    const plotData = {fig_json};
-                    const chartDomNode = document.getElementById('{unique_id_tag}');
-                    const orbitBtn = document.getElementById('control_orbit_btn');
-                    const containerBox = document.getElementById('render_box');
-                    
-                    Plotly.newPlot(chartDomNode, plotData.data, plotData.layout, {{responsive: true, displayModeBar: true}});
-                    
-                    let radAngle = 0;
-                    const radius = 1.7; 
-                    let isOrbiting = true;
-
-                    function toggleOrbit() {{
-                        isOrbiting = !isOrbiting;
-                        if(isOrbiting) {{
-                            orbitBtn.innerHTML = "Pause Auto-Orbit";
-                            orbitBtn.style.color = "white";
-                            try {{
-                                const currentEye = chartDomNode._fullLayout.scene.camera.eye;
-                                radAngle = Math.atan2(currentEye.y, currentEye.x);
-                            }} catch(e) {{}}
-                        }} else {{
-                            orbitBtn.innerHTML = "Resume Auto-Orbit (Manual Mode Active)";
-                            orbitBtn.style.color = "#00FFFF";
-                        }}
-                    }}
-                    
-                    function toggleFullscreen() {{
-                        if (!document.fullscreenElement) {{
-                            containerBox.requestFullscreen().catch(err => {{
-                                alert(`Error enabling full-screen: ${{err.message}}`);
-                            }});
-                        }} else {{
-                            document.exitFullscreen();
-                        }}
-                    }}
-                    
-                    document.addEventListener('fullscreenchange', () => {{
-                        Plotly.Plots.resize(chartDomNode);
-                    }});
-
-                    function runCameraOrbitLoop() {{
-                        if (isOrbiting) {{
-                            radAngle += 0.003; 
-                            const nextX = radius * Math.cos(radAngle);
-                            const nextY = radius * Math.sin(radAngle);
-                            
-                            try {{
-                                Plotly.relayout(chartDomNode, {{
-                                    'scene.camera.eye': {{ x: nextX, y: nextY, z: 1.0 }}
-                                }});
-                            }} catch(err) {{}}
-                        }}
-                        requestAnimationFrame(runCameraOrbitLoop);
-                    }}
-                    
-                    setTimeout(runCameraOrbitLoop, 300);
-                </script>
-            </body>
-            </html>
-            """
-            
-            components.html(sandbox_html, height=770)
-            
-            # --- DIGITAL IDENTITY CROSS-REFERENCE EXPANDERS ---
-            if active_sc == "Scenario Beta" and len(G_active.nodes()) > 1:
-                st.markdown("### Profile Reference Dashboard")
-                
-                dash_col1, dash_col2 = st.columns(2)
-                sorted_profiles = sorted([n for n in G_active.nodes() if n != "Jinan"])
-                
-                for idx, n in enumerate(sorted_profiles):
-                    target_column = dash_col1 if idx % 2 == 0 else dash_col2
-                    
-                    with target_column:
-                        with st.expander(f"Profile: {n}", expanded=False):
-                            encoded_handle = urllib.parse.quote(n)
-                            st.markdown(f"**Target Identifier Reference:** `{n}`")
-                            
-                            btn_ig, btn_li, btn_web = st.columns(3)
-                            with btn_ig:
-                                st.link_button("Instagram", f"https://www.instagram.com/{encoded_handle}", use_container_width=True)
-                            with btn_li:
-                                linkedin_search_url = f"https://www.linkedin.com/search/results/all/?keywords={encoded_handle}"
-                                st.link_button("LinkedIn Match", linkedin_search_url, use_container_width=True)
-                            with btn_web:
-                                web_recon_url = f"https://www.google.com/search?q=%22{encoded_handle}%22+site:linkedin.com+OR+site:instagram.com"
-                                st.link_button("Web Footprints", web_recon_url, use_container_width=True)
-                                
-                            st.caption("Verify if cross-platform profiles correlate regarding bio data structural text or location markers.")
+                        size=custom_
