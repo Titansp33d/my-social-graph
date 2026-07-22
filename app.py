@@ -16,7 +16,8 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Status:** Active. Changes are automatically serialized to `network_data.json`.
-* **Edge Rule:** Graph only links nodes with **mutual relationships** (Mutual Followers / Following).
+* **Auto-Sync:** Adding B as a follower of A automatically lists A in B's following list.
+* **Edge Rule:** Graph renders connections when relationships are mutual (reciprocal follow).
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -232,7 +233,7 @@ for index, tab_object in enumerate(tabs):
 
             st.markdown("---")
 
-            # --- DYNAMIC PROFILE ROW ENGINE ---
+            # --- DYNAMIC PROFILE ROW ENGINE WITH AUTOMATED CROSS-POPULATION ---
             current_people = list(st.session_state[f"people_{active_sc}"])
             state_mutated = False
 
@@ -254,11 +255,18 @@ for index, tab_object in enumerate(tabs):
                         parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
                         
                         existing = [f.strip() for f in curr_followers.split(",") if f.strip()]
-                        for item in parsed:
-                            if item not in st.session_state[f"people_{active_sc}"]:
-                                st.session_state[f"people_{active_sc}"].append(item)
-                            if item not in existing and item != person:
-                                existing.append(item)
+                        for follower_person in parsed:
+                            if follower_person not in st.session_state[f"people_{active_sc}"]:
+                                st.session_state[f"people_{active_sc}"].append(follower_person)
+                            if follower_person not in existing and follower_person != person:
+                                existing.append(follower_person)
+                            
+                            # CROSS-POPULATION: If B is a follower of A, add A to B's FOLLOWING list
+                            b_following = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(follower_person, "").split(",") if f.strip()]
+                            if person not in b_following:
+                                b_following.append(person)
+                                st.session_state[f"following_{active_sc}"][follower_person] = ", ".join(b_following)
+
                         st.session_state[f"followers_{active_sc}"][person] = ", ".join(existing)
                         state_mutated = True
 
@@ -275,11 +283,18 @@ for index, tab_object in enumerate(tabs):
                         parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
                         
                         existing = [f.strip() for f in curr_following.split(",") if f.strip()]
-                        for item in parsed:
-                            if item not in st.session_state[f"people_{active_sc}"]:
-                                st.session_state[f"people_{active_sc}"].append(item)
-                            if item not in existing and item != person:
-                                existing.append(item)
+                        for followed_person in parsed:
+                            if followed_person not in st.session_state[f"people_{active_sc}"]:
+                                st.session_state[f"people_{active_sc}"].append(followed_person)
+                            if followed_person not in existing and followed_person != person:
+                                existing.append(followed_person)
+                            
+                            # CROSS-POPULATION: If A follows B, add A to B's FOLLOWERS list
+                            b_followers = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(followed_person, "").split(",") if f.strip()]
+                            if person not in b_followers:
+                                b_followers.append(person)
+                                st.session_state[f"followers_{active_sc}"][followed_person] = ", ".join(b_followers)
+
                         st.session_state[f"following_{active_sc}"][person] = ", ".join(existing)
                         state_mutated = True
                 
