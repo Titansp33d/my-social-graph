@@ -16,6 +16,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Status:** Active. Changes are automatically serialized to `network_data.json`.
+* **Edge Rule:** Graph only links nodes with **mutual relationships** (Mutual Followers / Following).
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -33,7 +34,8 @@ def save_persisted_data():
     for sc in ["Scenario Alpha", "Scenario Beta", "Scenario Gamma"]:
         data_to_save["scenarios"][sc] = {
             "people": st.session_state.get(f"people_{sc}", ["Jinan"]),
-            "friends": st.session_state.get(f"friends_{sc}", {"Jinan": ""})
+            "followers": st.session_state.get(f"followers_{sc}", {"Jinan": ""}),
+            "following": st.session_state.get(f"following_{sc}", {"Jinan": ""})
         }
     try:
         with open(SAVE_FILE, "w") as f:
@@ -47,10 +49,16 @@ def cleanup_synthetic_nodes():
         peop = st.session_state.get(f"people_{sc}", [])
         st.session_state[f"people_{sc}"] = [p for p in peop if not p.startswith("User_")]
         
-        friends = st.session_state.get(f"friends_{sc}", {})
-        st.session_state[f"friends_{sc}"] = {
+        followers = st.session_state.get(f"followers_{sc}", {})
+        st.session_state[f"followers_{sc}"] = {
             k: ", ".join([f.strip() for f in v.split(",") if f.strip() and not f.strip().startswith("User_")])
-            for k, v in friends.items() if not k.startswith("User_")
+            for k, v in followers.items() if not k.startswith("User_")
+        }
+
+        following = st.session_state.get(f"following_{sc}", {})
+        st.session_state[f"following_{sc}"] = {
+            k: ", ".join([f.strip() for f in v.split(",") if f.strip() and not f.strip().startswith("User_")])
+            for k, v in following.items() if not k.startswith("User_")
         }
     save_persisted_data()
 
@@ -65,11 +73,17 @@ for sc in scenarios:
         else:
             st.session_state[f"people_{sc}"] = ["Jinan"]
             
-    if f"friends_{sc}" not in st.session_state:
+    if f"followers_{sc}" not in st.session_state:
         if saved_data and sc in saved_data["scenarios"]:
-            st.session_state[f"friends_{sc}"] = saved_data["scenarios"][sc]["friends"]
+            st.session_state[f"followers_{sc}"] = saved_data["scenarios"][sc].get("followers", {"Jinan": ""})
         else:
-            st.session_state[f"friends_{sc}"] = {"Jinan": ""}
+            st.session_state[f"followers_{sc}"] = {"Jinan": ""}
+
+    if f"following_{sc}" not in st.session_state:
+        if saved_data and sc in saved_data["scenarios"]:
+            st.session_state[f"following_{sc}"] = saved_data["scenarios"][sc].get("following", {"Jinan": ""})
+        else:
+            st.session_state[f"following_{sc}"] = {"Jinan": ""}
 
 # --- GLOBAL VISUAL SYSTEM CONFIGURATION ---
 st.sidebar.header("Constellation Styling")
@@ -108,23 +122,34 @@ if enable_generator:
 
             node_names = [f"User_{i+1}" for i in range(num_nodes)]
             
-            # Combine existing real people with synthetic ones
             existing_people = [p for p in st.session_state[f"people_{target_sc_gen}"] if not p.startswith("User_")]
             st.session_state[f"people_{target_sc_gen}"] = existing_people + node_names
             
-            friends_dict = st.session_state[f"friends_{target_sc_gen}"]
+            followers_dict = st.session_state[f"followers_{target_sc_gen}"]
+            following_dict = st.session_state[f"following_{target_sc_gen}"]
+
             for u, v in synth_G.edges():
                 u_name, v_name = node_names[u], node_names[v]
                 
-                u_curr = [f.strip() for f in friends_dict.get(u_name, "").split(",") if f.strip()]
-                if v_name not in u_curr: u_curr.append(v_name)
-                friends_dict[u_name] = ", ".join(u_curr)
-                
-                v_curr = [f.strip() for f in friends_dict.get(v_name, "").split(",") if f.strip()]
-                if u_name not in v_curr: v_curr.append(u_name)
-                friends_dict[v_name] = ", ".join(v_curr)
+                # Bi-directional synthetic connections
+                u_foll = [f.strip() for f in followers_dict.get(u_name, "").split(",") if f.strip()]
+                if v_name not in u_foll: u_foll.append(v_name)
+                followers_dict[u_name] = ", ".join(u_foll)
 
-            st.session_state[f"friends_{target_sc_gen}"] = friends_dict
+                u_ing = [f.strip() for f in following_dict.get(u_name, "").split(",") if f.strip()]
+                if v_name not in u_ing: u_ing.append(v_name)
+                following_dict[u_name] = ", ".join(u_ing)
+
+                v_foll = [f.strip() for f in followers_dict.get(v_name, "").split(",") if f.strip()]
+                if u_name not in v_foll: v_foll.append(u_name)
+                followers_dict[v_name] = ", ".join(v_foll)
+
+                v_ing = [f.strip() for f in following_dict.get(v_name, "").split(",") if f.strip()]
+                if u_name not in v_ing: v_ing.append(u_name)
+                following_dict[v_name] = ", ".join(v_ing)
+
+            st.session_state[f"followers_{target_sc_gen}"] = followers_dict
+            st.session_state[f"following_{target_sc_gen}"] = following_dict
             save_persisted_data()
             st.success(f"Generated {num_nodes}-node synthetic network!")
             st.rerun()
@@ -159,7 +184,8 @@ for index, tab_object in enumerate(tabs):
             
             if st.button(f"Reset and Clear Current Canvas", key=f"clear_{active_sc}", use_container_width=True):
                 st.session_state[f"people_{active_sc}"] = ["Jinan"]
-                st.session_state[f"friends_{active_sc}"] = {"Jinan": ""}
+                st.session_state[f"followers_{active_sc}"] = {"Jinan": ""}
+                st.session_state[f"following_{active_sc}"] = {"Jinan": ""}
                 save_persisted_data()
                 st.rerun()
                 
@@ -183,196 +209,78 @@ for index, tab_object in enumerate(tabs):
                             st.session_state[f"people_{active_sc}"].append(user_clean)
                         
                         known_list = [k.strip().replace("@", "") for k in knows_input.split(",") if k.strip()]
-                        existing_conn = [f.strip() for f in st.session_state[f"friends_{active_sc}"].get(user_clean, "").split(",") if f.strip()]
+                        
+                        # Set mutual connections by default for survey inputs
+                        st.session_state[f"followers_{active_sc}"][user_clean] = ", ".join(known_list)
+                        st.session_state[f"following_{active_sc}"][user_clean] = ", ".join(known_list)
                         
                         for person in known_list:
                             if person not in st.session_state[f"people_{active_sc}"]:
                                 st.session_state[f"people_{active_sc}"].append(person)
-                                st.session_state[f"friends_{active_sc}"][person] = ""
-                            if person not in existing_conn:
-                                existing_conn.append(person)
-                        
-                        st.session_state[f"friends_{active_sc}"][user_clean] = ", ".join(existing_conn)
+                            
+                            p_foll = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(person, "").split(",") if f.strip()]
+                            if user_clean not in p_foll: p_foll.append(user_clean)
+                            st.session_state[f"followers_{active_sc}"][person] = ", ".join(p_foll)
+
+                            p_ing = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(person, "").split(",") if f.strip()]
+                            if user_clean not in p_ing: p_ing.append(user_clean)
+                            st.session_state[f"following_{active_sc}"][person] = ", ".join(p_ing)
+
                         save_persisted_data()
                         st.success(f"Added {user_clean}'s connections to {active_sc}!")
                         st.rerun()
 
-            # --- OPTION 3: INTERACTION & MENTION GRAPH ENGINE ---
-            with st.expander("🏷️ Interaction & Mention Ingestion", expanded=False):
-                st.caption("Map nodes based on public tags, comments, or mention feeds.")
-                
-                api_source = st.radio("Data Source:", ["Manual Mention Log", "Graph API Ingestion (Stub)"], horizontal=True, key=f"opt3_src_{active_sc}")
-                
-                if api_source == "Manual Mention Log":
-                    mention_input = st.text_area(
-                        "Paste Mention Lines (e.g. 'alice -> bob, charlie'):",
-                        placeholder="alice -> bob, charlie\nbob -> charlie",
-                        height=100,
-                        key=f"opt3_mention_input_{active_sc}"
-                    )
-                    if st.button("Process Mention Network", use_container_width=True, key=f"opt3_btn_{active_sc}"):
-                        for line in mention_input.splitlines():
-                            if "->" in line:
-                                source, targets = line.split("->")
-                                src_clean = source.strip().replace("@", "")
-                                tgt_list = [t.strip().replace("@", "") for tt in targets.split(",") for t in tt.split()]
-                                
-                                if src_clean and src_clean not in st.session_state[f"people_{active_sc}"]:
-                                    st.session_state[f"people_{active_sc}"].append(src_clean)
-                                    st.session_state[f"friends_{active_sc}"][src_clean] = ""
-                                
-                                curr_friends = [f.strip() for f in st.session_state[f"friends_{active_sc}"].get(src_clean, "").split(",") if f.strip()]
-                                for tgt in tgt_list:
-                                    if tgt and tgt not in st.session_state[f"people_{active_sc}"]:
-                                        st.session_state[f"people_{active_sc}"].append(tgt)
-                                        st.session_state[f"friends_{active_sc}"][tgt] = ""
-                                    if tgt and tgt not in curr_friends:
-                                        curr_friends.append(tgt)
-                                
-                                st.session_state[f"friends_{active_sc}"][src_clean] = ", ".join(curr_friends)
-                        
-                        save_persisted_data()
-                        st.success("Interaction map updated!")
-                        st.rerun()
-                else:
-                    st.info("Requires `INSTAGRAM_BUSINESS_ACCOUNT_ID` and `ACCESS_TOKEN` configured in secrets.")
-                    st.text_input("Access Token", type="password", key=f"opt3_token_{active_sc}")
-                    if st.button("Fetch Public Mentions via Graph API", key=f"opt3_fetch_{active_sc}"):
-                        st.warning("Connect your Meta Developer Token above to run live query endpoints.")
-
             st.markdown("---")
-
-            # --- SCENARIO BETA: MAIN ROOT DATA INGESTION ENGINE ---
-            if active_sc == "Scenario Beta":
-                import_mode = st.radio("Select Input Method:", ["Raw Clipboard Paste", "File Upload (CSV/JSON/TXT)"], horizontal=True)
-                run_ingestion = False
-                parsed_handles = []
-
-                if import_mode == "Raw Clipboard Paste":
-                    bulk_input = st.text_area("Paste unstructured text or platform data strings here:", height=120, key="global_bulk_import_area")
-                    if st.button("Process Clipboard Data", use_container_width=True):
-                        normalized_text = bulk_input.replace("\n", " ").replace(",", " ")
-                        raw_tokens = normalized_text.split()
-                        for token in raw_tokens:
-                            clean = token.strip().replace("@", "")
-                            if clean.lower() in ["follow", "following", "requested", "remove", "verified", "profile", "posts", "followers", "message"]:
-                                continue
-                            if clean and all(c.isalnum() or c in "._" for c in clean):
-                                if clean not in parsed_handles:
-                                    parsed_handles.append(clean)
-                        if parsed_handles:
-                            run_ingestion = True
-
-                else:
-                    uploaded_file = st.file_uploader("Upload Data Sheet", type=["csv", "json", "txt"])
-                    if uploaded_file is not None:
-                        file_contents = uploaded_file.read().decode("utf-8", errors="ignore")
-                        
-                        if uploaded_file.name.endswith(".json"):
-                            try:
-                                data_obj = json.loads(file_contents)
-                                if isinstance(data_obj, list):
-                                    for item in data_obj:
-                                        if isinstance(item, str): parsed_handles.append(item.replace("@", "").strip())
-                                elif isinstance(data_obj, dict):
-                                    for key in ["users", "profiles", "relationships", "followers"]:
-                                        if key in data_obj and isinstance(data_obj[key], list):
-                                            for entry in data_obj[key]:
-                                                if isinstance(entry, str): parsed_handles.append(entry.replace("@", "").strip())
-                                                elif isinstance(entry, dict) and "username" in entry: parsed_handles.append(str(entry["username"]))
-                            except:
-                                st.error("Malformed JSON structure detected.")
-                                
-                        elif uploaded_file.name.endswith(".csv"):
-                            reader = csv.reader(file_contents.splitlines())
-                            for row in reader:
-                                for cell in row:
-                                    clean = cell.strip().replace("@", "")
-                                    if clean and not clean.replace(".","").replace("_","").isalnum(): continue
-                                    if clean and clean.lower() not in ["username", "handle", "id", "name"]:
-                                        parsed_handles.append(clean)
-                                        
-                        else:
-                            for line in file_contents.splitlines():
-                                normalized_line = line.replace(",", " ")
-                                for token in normalized_line.split():
-                                    clean = token.strip().replace("@", "")
-                                    if clean and all(c.isalnum() or c in "._" for c in clean):
-                                        parsed_handles.append(clean)
-                        
-                        if st.button("Run Data Aggregation", use_container_width=True):
-                            if parsed_handles:
-                                run_ingestion = True
-
-                if run_ingestion and parsed_handles:
-                    current_jinan_connections = st.session_state[f"friends_{active_sc}"].get("Jinan", "")
-                    existing_list = [f.strip() for f in current_jinan_connections.split(",") if f.strip()]
-                    
-                    for handle in parsed_handles:
-                        if handle not in st.session_state[f"people_{active_sc}"]:
-                            st.session_state[f"people_{active_sc}"].append(handle)
-                            st.session_state[f"friends_{active_sc}"][handle] = ""
-                        if handle not in existing_list and handle != "Jinan":
-                            existing_list.append(handle)
-                    
-                    st.session_state[f"friends_{active_sc}"]["Jinan"] = ", ".join(existing_list)
-                    save_persisted_data()
-                    st.success(f"Appended {len(parsed_handles)} profiles securely.")
-                    st.rerun()
-                st.markdown("---")
 
             # --- DYNAMIC PROFILE ROW ENGINE ---
             current_people = list(st.session_state[f"people_{active_sc}"])
             state_mutated = False
 
             for person in current_people:
-                current_val = st.session_state[f"friends_{active_sc}"].get(person, "")
-                box_label = f"Mutual connections of {person}" if active_sc == "Scenario Beta" else f"Connections of {person}"
+                st.markdown(f"#### Profile: {person}")
                 
-                st.markdown(f"#### {box_label}")
+                col_foll, col_ing = st.columns(2)
                 
-                if current_val:
-                    st.caption(f"Current Linked Connections: {current_val}")
-                else:
-                    st.caption("No connections registered.")
-                
-                local_input = st.text_area(
-                    "Paste unstructured text or platform data strings here:", 
-                    height=100, 
-                    key=f"area_local_{active_sc}_{person}",
-                    help="Accepts lists separated by spaces, tabs, commas, or new lines."
-                )
-                
-                if st.button("Process Clipboard Data", key=f"btn_local_{active_sc}_{person}", use_container_width=True):
-                    normalized_text = local_input.replace("\n", " ").replace(",", " ")
-                    raw_tokens = normalized_text.split()
-                    
-                    local_parsed = []
-                    for token in raw_tokens:
-                        clean = token.strip().replace("@", "")
-                        if clean.lower() in ["follow", "following", "requested", "remove", "verified", "profile", "posts", "followers", "message"]:
-                            continue
-                        if clean and all(c.isalnum() or c in "._" for c in clean):
-                            if clean not in local_parsed:
-                                local_parsed.append(clean)
-                    
-                    if local_parsed:
-                        existing_list = [f.strip() for f in current_val.split(",") if f.strip()]
-                        for handle in local_parsed:
-                            if handle not in st.session_state[f"people_{active_sc}"]:
-                                st.session_state[f"people_{active_sc}"].append(handle)
-                                st.session_state[f"friends_{active_sc}"][handle] = ""
-                            if handle not in existing_list and handle != person:
-                                existing_list.append(handle)
+                with col_foll:
+                    curr_followers = st.session_state[f"followers_{active_sc}"].get(person, "")
+                    st.caption(f"Followers: {curr_followers if curr_followers else 'None'}")
+                    input_followers = st.text_area(
+                        "Paste Followers:", 
+                        height=100, 
+                        key=f"area_foll_{active_sc}_{person}"
+                    )
+                    if st.button("Update Followers", key=f"btn_foll_{active_sc}_{person}", use_container_width=True):
+                        raw_tokens = input_followers.replace("\n", " ").replace(",", " ").split()
+                        parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
                         
-                        st.session_state[f"friends_{active_sc}"][person] = ", ".join(existing_list)
+                        existing = [f.strip() for f in curr_followers.split(",") if f.strip()]
+                        for item in parsed:
+                            if item not in st.session_state[f"people_{active_sc}"]:
+                                st.session_state[f"people_{active_sc}"].append(item)
+                            if item not in existing and item != person:
+                                existing.append(item)
+                        st.session_state[f"followers_{active_sc}"][person] = ", ".join(existing)
                         state_mutated = True
 
-                friends_list = [f.strip().replace("@", "") for f in st.session_state[f"friends_{active_sc}"][person].split(",") if f.strip()]
-                for friend in friends_list:
-                    if friend not in st.session_state[f"people_{active_sc}"]:
-                        st.session_state[f"people_{active_sc}"].append(friend)
-                        st.session_state[f"friends_{active_sc}"][friend] = ""
+                with col_ing:
+                    curr_following = st.session_state[f"following_{active_sc}"].get(person, "")
+                    st.caption(f"Following: {curr_following if curr_following else 'None'}")
+                    input_following = st.text_area(
+                        "Paste Following:", 
+                        height=100, 
+                        key=f"area_ing_{active_sc}_{person}"
+                    )
+                    if st.button("Update Following", key=f"btn_ing_{active_sc}_{person}", use_container_width=True):
+                        raw_tokens = input_following.replace("\n", " ").replace(",", " ").split()
+                        parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
+                        
+                        existing = [f.strip() for f in curr_following.split(",") if f.strip()]
+                        for item in parsed:
+                            if item not in st.session_state[f"people_{active_sc}"]:
+                                st.session_state[f"people_{active_sc}"].append(item)
+                            if item not in existing and item != person:
+                                existing.append(item)
+                        st.session_state[f"following_{active_sc}"][person] = ", ".join(existing)
                         state_mutated = True
                 
                 st.markdown("---")
@@ -381,30 +289,28 @@ for index, tab_object in enumerate(tabs):
                 save_persisted_data()
                 st.rerun()
 
-            # --- AUTO-PRUNING ENGINE ---
-            temp_G = nx.Graph()
-            for p in st.session_state[f"people_{active_sc}"]: temp_G.add_node(p)
-            for person, friends_str in st.session_state[f"friends_{active_sc}"].items():
-                flist = [f.strip().replace("@", "") for f in friends_str.split(",") if f.strip()]
-                for friend in flist:
-                    if temp_G.has_node(person) and temp_G.has_node(friend): temp_G.add_edge(person, friend)
-
-            nodes_to_auto_prune = [n for n in list(temp_G.nodes()) if n != "Jinan" and temp_G.degree(n) == 0]
-            if nodes_to_auto_prune:
-                for target in nodes_to_auto_prune:
-                    if target in st.session_state[f"people_{active_sc}"]: st.session_state[f"people_{active_sc}"].remove(target)
-                    if target in st.session_state[f"friends_{active_sc}"]: del st.session_state[f"friends_{active_sc}"][target]
-                save_persisted_data()
-                st.rerun()
-
         with col_graph:
-            # --- GRAPH CONSTRUCT ENGINE ---
+            # --- GRAPH CONSTRUCT ENGINE (MUTUAL CONNECTIONS ONLY) ---
+            G_directed = nx.DiGraph()
+            for person in st.session_state[f"people_{active_sc}"]: 
+                G_directed.add_node(person)
+            
+            # Populate directed edges
+            for person in st.session_state[f"people_{active_sc}"]:
+                foll_list = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(person, "").split(",") if f.strip()]
+                ing_list = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(person, "").split(",") if f.strip()]
+                
+                for f in foll_list:
+                    if G_directed.has_node(f): G_directed.add_edge(f, person)  # f follows person
+                for i in ing_list:
+                    if G_directed.has_node(i): G_directed.add_edge(person, i)  # person follows i
+
+            # Filter for bi-directional (mutual) edges only
             G_active = nx.Graph()
-            for person in st.session_state[f"people_{active_sc}"]: G_active.add_node(person)
-            for person, friends_string in st.session_state[f"friends_{active_sc}"].items():
-                friends_list = [f.strip().replace("@", "") for f in friends_string.split(",") if f.strip()]
-                for friend in friends_list:
-                    if G_active.has_node(person) and G_active.has_node(friend): G_active.add_edge(person, friend)
+            G_active.add_nodes_from(G_directed.nodes())
+            for u, v in G_directed.edges():
+                if G_directed.has_edge(v, u):  # Mutual reciprocity check
+                    G_active.add_edge(u, v)
 
             if len(G_active.nodes()) > 0:
                 pos_active = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
@@ -426,8 +332,8 @@ for index, tab_object in enumerate(tabs):
 
             # Metrics Display
             sm1, sm2, sm3 = st.columns(3)
-            sm1.metric("Total Profile Nodes" if active_sc == "Scenario Beta" else "Active Nodes", len(G_active.nodes()))
-            sm2.metric("Total Link Connections", len(G_active.edges()))
+            sm1.metric("Total Profile Nodes", len(G_active.nodes()))
+            sm2.metric("Mutual Links", len(G_active.edges()))
             sm3.metric("Isolated Social Islands", nx.number_connected_components(G_active))
 
             # --- PLOTLY 3D GRAPH ASSEMBLY ---
@@ -452,7 +358,6 @@ for index, tab_object in enumerate(tabs):
 
             node_x, node_y, node_z, node_text, node_colors, custom_sizes, border_colors = [], [], [], [], [], [], []
             
-            # Safe calculation of relative density mapping
             raw_max = max([G_active.degree(node) for node in G_active.nodes()]) if len(G_active.nodes()) > 0 else 0
             max_degree = raw_max if raw_max > 0 else 1
 
@@ -463,16 +368,11 @@ for index, tab_object in enumerate(tabs):
                 node_z.append(z)
                 deg = G_active.degree(node)
                 
-                # Dynamic relative normalization mapping (0.0 - 1.0)
                 relative_density_weight = (deg / max_degree)
                 node_colors.append(relative_density_weight)
                 
-                if active_sc == "Scenario Beta" and node != "Jinan":
-                    node_text.append(f"<b>Handle:</b> {node}<br><b>Connections:</b> {deg}<br><b>Relative Hub Weight:</b> {relative_density_weight:.2f}<br><i>Expand cross-references below</i>")
-                else:
-                    node_text.append(f"<b>Identity:</b> {node}<br><b>Connections:</b> {deg}<br><b>Relative Hub Weight:</b> {relative_density_weight:.2f}")
+                node_text.append(f"<b>Identity:</b> {node}<br><b>Mutual Connections:</b> {deg}<br><b>Relative Hub Weight:</b> {relative_density_weight:.2f}")
                 
-                # Dynamic Node Physical Scaling
                 if active_sc == search_target_sc and node == target_pinpoint_global:
                     custom_sizes.append(node_size_global * 3.0)
                     border_colors.append("#00FFFF")
