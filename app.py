@@ -187,12 +187,6 @@ for index, tab_object in enumerate(tabs):
                 st.session_state[f"people_{active_sc}"] = ["Jinan"]
                 st.session_state[f"followers_{active_sc}"] = {"Jinan": ""}
                 st.session_state[f"following_{active_sc}"] = {"Jinan": ""}
-                
-                # Clear individual text area keys from session state so they visually reset immediately
-                for k in list(st.session_state.keys()):
-                    if k.startswith(f"text_foll_{active_sc}_") or k.startswith(f"text_ing_{active_sc}_"):
-                        del st.session_state[k]
-                        
                 save_persisted_data()
                 st.rerun()
                 
@@ -221,10 +215,6 @@ for index, tab_object in enumerate(tabs):
                         st.session_state[f"followers_{active_sc}"][user_clean] = ", ".join(known_list)
                         st.session_state[f"following_{active_sc}"][user_clean] = ", ".join(known_list)
                         
-                        # Update direct text fields in session state
-                        st.session_state[f"text_foll_{active_sc}_{user_clean}"] = ", ".join(known_list)
-                        st.session_state[f"text_ing_{active_sc}_{user_clean}"] = ", ".join(known_list)
-                        
                         for person in known_list:
                             if person not in st.session_state[f"people_{active_sc}"]:
                                 st.session_state[f"people_{active_sc}"].append(person)
@@ -232,12 +222,10 @@ for index, tab_object in enumerate(tabs):
                             p_foll = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(person, "").split(",") if f.strip()]
                             if user_clean not in p_foll: p_foll.append(user_clean)
                             st.session_state[f"followers_{active_sc}"][person] = ", ".join(p_foll)
-                            st.session_state[f"text_foll_{active_sc}_{person}"] = ", ".join(p_foll)
 
                             p_ing = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(person, "").split(",") if f.strip()]
                             if user_clean not in p_ing: p_ing.append(user_clean)
                             st.session_state[f"following_{active_sc}"][person] = ", ".join(p_ing)
-                            st.session_state[f"text_ing_{active_sc}_{person}"] = ", ".join(p_ing)
 
                         save_persisted_data()
                         st.success(f"Added {user_clean}'s connections to {active_sc}!")
@@ -245,7 +233,7 @@ for index, tab_object in enumerate(tabs):
 
             st.markdown("---")
 
-            # --- DYNAMIC PROFILE ROW ENGINE WITH DIRECT TEXTBOX BINDING ---
+            # --- DYNAMIC PROFILE ROW ENGINE (CLEAN STATE MUTATION) ---
             current_people = list(st.session_state[f"people_{active_sc}"])
             state_mutated = False
 
@@ -254,22 +242,15 @@ for index, tab_object in enumerate(tabs):
                 
                 col_foll, col_ing = st.columns(2)
                 
-                # Key bindings for text fields
-                key_foll_text = f"text_foll_{active_sc}_{person}"
-                key_ing_text = f"text_ing_{active_sc}_{person}"
-                
-                # Synchronize session state dictionary to text box key
-                if key_foll_text not in st.session_state:
-                    st.session_state[key_foll_text] = st.session_state[f"followers_{active_sc}"].get(person, "")
-                if key_ing_text not in st.session_state:
-                    st.session_state[key_ing_text] = st.session_state[f"following_{active_sc}"].get(person, "")
-                
+                curr_foll_val = st.session_state[f"followers_{active_sc}"].get(person, "")
+                curr_ing_val = st.session_state[f"following_{active_sc}"].get(person, "")
+
                 with col_foll:
                     input_followers = st.text_area(
                         "Followers:", 
-                        value=st.session_state[key_foll_text],
+                        value=curr_foll_val,
                         height=100, 
-                        key=key_foll_text
+                        key=f"area_foll_{active_sc}_{person}"
                     )
                     if st.button("Update Followers", key=f"btn_foll_{active_sc}_{person}", use_container_width=True):
                         raw_tokens = input_followers.replace("\n", " ").replace(",", " ").split()
@@ -286,21 +267,17 @@ for index, tab_object in enumerate(tabs):
                             b_following = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(follower_person, "").split(",") if f.strip()]
                             if person not in b_following:
                                 b_following.append(person)
-                                updated_b_ing_str = ", ".join(b_following)
-                                st.session_state[f"following_{active_sc}"][follower_person] = updated_b_ing_str
-                                st.session_state[f"text_ing_{active_sc}_{follower_person}"] = updated_b_ing_str
+                                st.session_state[f"following_{active_sc}"][follower_person] = ", ".join(b_following)
 
-                        updated_foll_str = ", ".join(existing)
-                        st.session_state[f"followers_{active_sc}"][person] = updated_foll_str
-                        st.session_state[key_foll_text] = updated_foll_str
+                        st.session_state[f"followers_{active_sc}"][person] = ", ".join(existing)
                         state_mutated = True
 
                 with col_ing:
                     input_following = st.text_area(
                         "Following:", 
-                        value=st.session_state[key_ing_text],
+                        value=curr_ing_val,
                         height=100, 
-                        key=key_ing_text
+                        key=f"area_ing_{active_sc}_{person}"
                     )
                     if st.button("Update Following", key=f"btn_ing_{active_sc}_{person}", use_container_width=True):
                         raw_tokens = input_following.replace("\n", " ").replace(",", " ").split()
@@ -317,13 +294,9 @@ for index, tab_object in enumerate(tabs):
                             b_followers = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(followed_person, "").split(",") if f.strip()]
                             if person not in b_followers:
                                 b_followers.append(person)
-                                updated_b_foll_str = ", ".join(b_followers)
-                                st.session_state[f"followers_{active_sc}"][followed_person] = updated_b_foll_str
-                                st.session_state[f"text_foll_{active_sc}_{followed_person}"] = updated_b_foll_str
+                                st.session_state[f"followers_{active_sc}"][followed_person] = ", ".join(b_followers)
 
-                        updated_ing_str = ", ".join(existing)
-                        st.session_state[f"following_{active_sc}"][person] = updated_ing_str
-                        st.session_state[key_ing_text] = updated_ing_str
+                        st.session_state[f"following_{active_sc}"][person] = ", ".join(existing)
                         state_mutated = True
                 
                 st.markdown("---")
@@ -338,10 +311,10 @@ for index, tab_object in enumerate(tabs):
             for person in st.session_state[f"people_{active_sc}"]: 
                 G_directed.add_node(person)
             
-            # Populate directed edges directly from the session text box keys
+            # Populate directed edges
             for person in st.session_state[f"people_{active_sc}"]:
-                foll_list = [f.strip() for f in st.session_state.get(f"text_foll_{active_sc}_{person}", "").split(",") if f.strip()]
-                ing_list = [f.strip() for f in st.session_state.get(f"text_ing_{active_sc}_{person}", "").split(",") if f.strip()]
+                foll_list = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(person, "").split(",") if f.strip()]
+                ing_list = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(person, "").split(",") if f.strip()]
                 
                 for f in foll_list:
                     if G_directed.has_node(f): G_directed.add_edge(f, person)  # f follows person
