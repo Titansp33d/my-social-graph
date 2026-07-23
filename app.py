@@ -3,7 +3,6 @@ import networkx as nx
 import plotly.graph_objects as go
 import json
 import os
-import csv
 import urllib.parse
 import streamlit.components.v1 as components
 
@@ -16,7 +15,7 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Status:** Active. Changes are automatically serialized to `network_data.json`.
-* **Synchronized Inputs:** Text fields automatically update when cross-populating followers and following lists.
+* **Bi-Directional Auto-Sync:** Updating A's followers updates B's following. Updating A's following updates B's followers.
 * **Edge Rule:** Graph renders connections when relationships are mutual (reciprocal follow).
 """)
 
@@ -211,7 +210,6 @@ for index, tab_object in enumerate(tabs):
                         
                         known_list = [k.strip().replace("@", "") for k in knows_input.split(",") if k.strip()]
                         
-                        # Set mutual connections by default for survey inputs
                         st.session_state[f"followers_{active_sc}"][user_clean] = ", ".join(known_list)
                         st.session_state[f"following_{active_sc}"][user_clean] = ", ".join(known_list)
                         
@@ -233,7 +231,7 @@ for index, tab_object in enumerate(tabs):
 
             st.markdown("---")
 
-            # --- DYNAMIC PROFILE ROW ENGINE (CLEAN STATE MUTATION) ---
+            # --- DYNAMIC PROFILE ROW ENGINE ---
             current_people = list(st.session_state[f"people_{active_sc}"])
             state_mutated = False
 
@@ -247,13 +245,14 @@ for index, tab_object in enumerate(tabs):
 
                 with col_foll:
                     input_followers = st.text_area(
-                        "Followers:", 
+                        "Followers (comma-separated):", 
                         value=curr_foll_val,
                         height=100, 
                         key=f"area_foll_{active_sc}_{person}"
                     )
                     if st.button("Update Followers", key=f"btn_foll_{active_sc}_{person}", use_container_width=True):
-                        raw_tokens = input_followers.replace("\n", " ").replace(",", " ").split()
+                        # Parse inputs splitting on spaces, newlines, or commas
+                        raw_tokens = input_followers.replace("\n", ",").replace(" ", ",").split(",")
                         parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
                         
                         existing = []
@@ -263,7 +262,7 @@ for index, tab_object in enumerate(tabs):
                             if follower_person not in existing and follower_person != person:
                                 existing.append(follower_person)
                             
-                            # CROSS-POPULATION: If B is a follower of A, add A to B's FOLLOWING list
+                            # SYNC: If B is in A's FOLLOWERS -> Add A to B's FOLLOWING list
                             b_following = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(follower_person, "").split(",") if f.strip()]
                             if person not in b_following:
                                 b_following.append(person)
@@ -274,13 +273,14 @@ for index, tab_object in enumerate(tabs):
 
                 with col_ing:
                     input_following = st.text_area(
-                        "Following:", 
+                        "Following (comma-separated):", 
                         value=curr_ing_val,
                         height=100, 
                         key=f"area_ing_{active_sc}_{person}"
                     )
                     if st.button("Update Following", key=f"btn_ing_{active_sc}_{person}", use_container_width=True):
-                        raw_tokens = input_following.replace("\n", " ").replace(",", " ").split()
+                        # Parse inputs splitting on spaces, newlines, or commas
+                        raw_tokens = input_following.replace("\n", ",").replace(" ", ",").split(",")
                         parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
                         
                         existing = []
@@ -290,7 +290,7 @@ for index, tab_object in enumerate(tabs):
                             if followed_person not in existing and followed_person != person:
                                 existing.append(followed_person)
                             
-                            # CROSS-POPULATION: If A follows B, add A to B's FOLLOWERS list
+                            # INVERSE SYNC: If A is FOLLOWING B -> Add A to B's FOLLOWERS list
                             b_followers = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(followed_person, "").split(",") if f.strip()]
                             if person not in b_followers:
                                 b_followers.append(person)
