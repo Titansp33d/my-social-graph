@@ -15,9 +15,9 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Status:** Active. Changes are automatically serialized to `network_data.json`.
-* **Scalable Profile Manager:** Select individual profiles to edit to support high-node networks without DOM crashes.
+* **Scalable Profile Manager:** Select individual profiles to edit without DOM/memory limits.
 * **Bi-Directional Auto-Sync:** Updating A's followers updates B's following, and vice versa.
-* **Strict Mutual Edge Filtering:** Non-mutual nodes are filtered out of the graph view to avoid cluttering reciprocal clusters.
+* **Cosmic Orbit Layout:** Mutual connections form central core clusters; non-mutual nodes float on the periphery as scattered background stars until reciprocated.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -242,7 +242,6 @@ for index, tab_object in enumerate(tabs):
             )
 
             if selected_person:
-                # Direct state key synchronization to preserve contents across site reloads
                 foll_key = f"area_foll_{active_sc}_{selected_person}"
                 ing_key = f"area_ing_{active_sc}_{selected_person}"
 
@@ -261,7 +260,7 @@ for index, tab_object in enumerate(tabs):
                     )
                     if st.button("Update Followers", key=f"btn_foll_{active_sc}_{selected_person}", use_container_width=True):
                         raw_tokens = input_followers.replace("\n", ",").replace(" ", ",").split(",")
-                        parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
+                        parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._-" for c in t.strip())]
                         
                         existing = []
                         for follower_person in parsed:
@@ -288,7 +287,7 @@ for index, tab_object in enumerate(tabs):
                     )
                     if st.button("Update Following", key=f"btn_ing_{active_sc}_{selected_person}", use_container_width=True):
                         raw_tokens = input_following.replace("\n", ",").replace(" ", ",").split(",")
-                        parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
+                        parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._-" for c in t.strip())]
                         
                         existing = []
                         for followed_person in parsed:
@@ -308,12 +307,13 @@ for index, tab_object in enumerate(tabs):
                         st.rerun()
 
         with col_graph:
-            # --- GRAPH CONSTRUCT ENGINE (STRICT MUTUAL CONNECTIONS ONLY) ---
+            # --- GRAPH CONSTRUCT ENGINE (MUTUAL LINKS + SCATTERED BACKGROUND STARS) ---
             G_directed = nx.DiGraph()
+            
+            # 1. Register ALL nodes into directed graph
             for person in st.session_state[f"people_{active_sc}"]: 
                 G_directed.add_node(person)
             
-            # Populate directed edges
             for person in st.session_state[f"people_{active_sc}"]:
                 foll_list = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(person, "").split(",") if f.strip()]
                 ing_list = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(person, "").split(",") if f.strip()]
@@ -323,16 +323,16 @@ for index, tab_object in enumerate(tabs):
                 for i in ing_list:
                     if G_directed.has_node(i): G_directed.add_edge(person, i)
 
-            # Filter for bi-directional (mutual) edges
-            G_mutual = nx.Graph()
+            # 2. Build G_active with ALL nodes, but ONLY mutual edges
+            G_active = nx.Graph()
+            for person in G_directed.nodes():
+                G_active.add_node(person)
+
             for u, v in G_directed.edges():
-                if G_directed.has_edge(v, u):
-                    G_mutual.add_edge(u, v)
+                if G_directed.has_edge(v, u):  # Reciprocal follow check
+                    G_active.add_edge(u, v)
 
-            # Filter out non-mutual isolated nodes
-            nodes_with_mutuals = [node for node, degree in G_mutual.degree() if degree > 0]
-            G_active = G_mutual.subgraph(nodes_with_mutuals).copy()
-
+            # 3. Calculate 3D positions (Mutual nodes pull inward; Non-mutual float as scatter stars)
             if len(G_active.nodes()) > 0:
                 pos_active = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
             else:
@@ -350,15 +350,16 @@ for index, tab_object in enumerate(tabs):
                             shortest_path_edges.add((shortest_path_nodes[i+1], shortest_path_nodes[i]))
                         st.success("Route Found: " + " -> ".join([f"{n}" for n in shortest_path_nodes]))
                     except nx.NetworkXNoPath:
-                        st.error("No path connects these nodes in the mutual graph.")
-                else:
-                    st.warning("One or both selected nodes do not have mutual connections in this scenario.")
+                        st.error("No mutual connection path bridges these nodes.")
 
             # Metrics Display
+            mutual_count = len([n for n, d in G_active.degree() if d > 0])
+            scatter_count = len(G_active.nodes()) - mutual_count
+
             sm1, sm2, sm3 = st.columns(3)
-            sm1.metric("Mutual Profiles", len(G_active.nodes()))
-            sm2.metric("Mutual Links", len(G_active.edges()))
-            sm3.metric("Isolated Clusters", nx.number_connected_components(G_active) if len(G_active) > 0 else 0)
+            sm1.metric("Central Mutual Hubs", mutual_count)
+            sm2.metric("Scattered Star Nodes", scatter_count)
+            sm3.metric("Mutual Link Edges", len(G_active.edges()))
 
             # --- PLOTLY 3D GRAPH ASSEMBLY ---
             data_traces = []
@@ -380,56 +381,81 @@ for index, tab_object in enumerate(tabs):
             if edge_x: data_traces.append(go.Scatter3d(x=edge_x, y=edge_y, z=edge_z, line=dict(width=2, color=edge_color_global), hoverinfo='none', mode='lines'))
             if path_edge_x: data_traces.append(go.Scatter3d(x=path_edge_x, y=path_edge_y, z=path_edge_z, line=dict(width=6, color="#FF3333"), mode='lines'))
 
-            node_x, node_y, node_z, node_text, node_colors, custom_sizes, border_colors = [], [], [], [], [], [], []
-            
-            raw_max = max([G_active.degree(node) for node in G_active.nodes()]) if len(G_active.nodes()) > 0 else 0
-            max_degree = raw_max if raw_max > 0 else 1
+            # Separate rendering for Mutual Clusters vs Scattered Background Stars
+            mutual_x, mutual_y, mutual_z, mutual_text, mutual_colors, mutual_sizes, mutual_borders = [], [], [], [], [], [], []
+            star_x, star_y, star_z, star_text = [], [], [], []
+
+            raw_max = max([deg for node, deg in G_active.degree() if deg > 0], default=1)
 
             for node in G_active.nodes():
                 x, y, z = pos_active[node]
-                node_x.append(x)
-                node_y.append(y)
-                node_z.append(z)
                 deg = G_active.degree(node)
-                
-                relative_density_weight = (deg / max_degree)
-                node_colors.append(relative_density_weight)
-                
-                node_text.append(f"<b>Identity:</b> {node}<br><b>Mutual Connections:</b> {deg}<br><b>Relative Hub Weight:</b> {relative_density_weight:.2f}")
-                
-                if active_sc == search_target_sc and node == target_pinpoint_global:
-                    custom_sizes.append(node_size_global * 3.0)
-                    border_colors.append("#00FFFF")
-                elif active_sc == search_target_sc and node in shortest_path_nodes:
-                    custom_sizes.append(node_size_global * 2.0)
-                    border_colors.append("#FF3333")
-                elif deg == raw_max and raw_max > 0:
-                    custom_sizes.append(node_size_global * 2.5)
-                    border_colors.append("#FFCC00")
-                else:
-                    scaled_size = node_size_global + (relative_density_weight ** 2 * 24)
-                    custom_sizes.append(scaled_size)
-                    border_colors.append("#FFFFFF")
 
-            if node_x:
-                node_trace = go.Scatter3d(
-                    x=node_x, y=node_y, z=node_z, mode='markers', hovertext=node_text, hoverinfo='text',
+                if deg > 0:
+                    # Mutual Node (Core Constellation)
+                    mutual_x.append(x)
+                    mutual_y.append(y)
+                    mutual_z.append(z)
+                    
+                    relative_density_weight = (deg / raw_max)
+                    mutual_colors.append(relative_density_weight)
+                    mutual_text.append(f"<b>Identity:</b> {node}<br><b>Status:</b> Mutual Reciprocal<br><b>Mutual Connections:</b> {deg}")
+                    
+                    if active_sc == search_target_sc and node == target_pinpoint_global:
+                        mutual_sizes.append(node_size_global * 3.0)
+                        mutual_borders.append("#00FFFF")
+                    elif active_sc == search_target_sc and node in shortest_path_nodes:
+                        mutual_sizes.append(node_size_global * 2.0)
+                        mutual_borders.append("#FF3333")
+                    elif deg == raw_max:
+                        mutual_sizes.append(node_size_global * 2.5)
+                        mutual_borders.append("#FFCC00")
+                    else:
+                        scaled_size = node_size_global + (relative_density_weight ** 2 * 20)
+                        mutual_sizes.append(scaled_size)
+                        mutual_borders.append("#FFFFFF")
+                else:
+                    # Non-Mutual Node (Scattered Orbit Star)
+                    star_x.append(x)
+                    star_y.append(y)
+                    star_z.append(z)
+                    star_text.append(f"<b>Identity:</b> {node}<br><b>Status:</b> Non-Reciprocal (Scattered Orbit Star)<br><i>Awaiting mutual link...</i>")
+
+            # 1. Render Scattered Background Stars
+            if star_x:
+                star_trace = go.Scatter3d(
+                    x=star_x, y=star_y, z=star_z, mode='markers', hovertext=star_text, hoverinfo='text',
+                    marker=dict(
+                        size=node_size_global * 0.45,
+                        color='#556677',
+                        opacity=0.4,
+                        line=dict(width=0.5, color='#8899A0')
+                    ),
+                    name="Scattered Orbit Stars"
+                )
+                data_traces.append(star_trace)
+
+            # 2. Render Central Mutual Constellation Nodes
+            if mutual_x:
+                mutual_trace = go.Scatter3d(
+                    x=mutual_x, y=mutual_y, z=mutual_z, mode='markers', hovertext=mutual_text, hoverinfo='text',
                     marker=dict(
                         showscale=True, 
                         colorscale=color_theme, 
-                        color=node_colors, 
-                        size=custom_sizes, 
-                        line=dict(width=1.5, color=border_colors),
+                        color=mutual_colors, 
+                        size=mutual_sizes, 
+                        line=dict(width=1.5, color=mutual_borders),
                         cmin=0.0,
                         cmax=1.0,
                         colorbar=dict(
-                            title=dict(text="Relative Density Weight", side="top"),
+                            title=dict(text="Hub Density", side="top"),
                             tickvals=[0, 0.5, 1.0],
                             ticktext=["Low", "Medium", "Peak Hub"]
                         )
-                    )
+                    ),
+                    name="Mutual Connections"
                 )
-                data_traces.append(node_trace)
+                data_traces.append(mutual_trace)
 
             layout_active = go.Layout(
                 height=760, showlegend=False,
