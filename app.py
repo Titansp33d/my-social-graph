@@ -15,7 +15,8 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Status:** Active. Changes are automatically serialized to `network_data.json`.
-* **Bi-Directional Auto-Sync:** Updating A's followers updates B's following. Updating A's following updates B's followers.
+* **Scalable Profile Manager:** Select individual profiles to edit to support high-node networks (900+ connections).
+* **Bi-Directional Auto-Sync:** Updating A's followers updates B's following, and vice versa.
 * **Edge Rule:** Graph renders connections when relationships are mutual (reciprocal follow).
 """)
 
@@ -131,7 +132,6 @@ if enable_generator:
             for u, v in synth_G.edges():
                 u_name, v_name = node_names[u], node_names[v]
                 
-                # Bi-directional synthetic connections
                 u_foll = [f.strip() for f in followers_dict.get(u_name, "").split(",") if f.strip()]
                 if v_name not in u_foll: u_foll.append(v_name)
                 followers_dict[u_name] = ", ".join(u_foll)
@@ -231,27 +231,30 @@ for index, tab_object in enumerate(tabs):
 
             st.markdown("---")
 
-            # --- DYNAMIC PROFILE ROW ENGINE ---
-            current_people = list(st.session_state[f"people_{active_sc}"])
-            state_mutated = False
+            # --- SINGLE PROFILE SELECTOR & EDITOR (PREVENTS WIDGET OVERLOAD) ---
+            active_people = sorted(list(st.session_state[f"people_{active_sc}"]))
+            
+            st.markdown("#### Manage Node Relationships")
+            selected_person = st.selectbox(
+                "Select Node Profile to Edit:",
+                options=active_people,
+                key=f"select_profile_{active_sc}"
+            )
 
-            for person in current_people:
-                st.markdown(f"#### Profile: {person}")
-                
+            if selected_person:
+                curr_foll_val = st.session_state[f"followers_{active_sc}"].get(selected_person, "")
+                curr_ing_val = st.session_state[f"following_{active_sc}"].get(selected_person, "")
+
                 col_foll, col_ing = st.columns(2)
-                
-                curr_foll_val = st.session_state[f"followers_{active_sc}"].get(person, "")
-                curr_ing_val = st.session_state[f"following_{active_sc}"].get(person, "")
 
                 with col_foll:
                     input_followers = st.text_area(
-                        "Followers (comma-separated):", 
+                        f"Followers of {selected_person} (comma/newline separated):", 
                         value=curr_foll_val,
-                        height=100, 
-                        key=f"area_foll_{active_sc}_{person}"
+                        height=220, 
+                        key=f"area_foll_{active_sc}_{selected_person}"
                     )
-                    if st.button("Update Followers", key=f"btn_foll_{active_sc}_{person}", use_container_width=True):
-                        # Parse inputs splitting on spaces, newlines, or commas
+                    if st.button("Update Followers", key=f"btn_foll_{active_sc}_{selected_person}", use_container_width=True):
                         raw_tokens = input_followers.replace("\n", ",").replace(" ", ",").split(",")
                         parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
                         
@@ -259,27 +262,27 @@ for index, tab_object in enumerate(tabs):
                         for follower_person in parsed:
                             if follower_person not in st.session_state[f"people_{active_sc}"]:
                                 st.session_state[f"people_{active_sc}"].append(follower_person)
-                            if follower_person not in existing and follower_person != person:
+                            if follower_person not in existing and follower_person != selected_person:
                                 existing.append(follower_person)
                             
                             # SYNC: If B is in A's FOLLOWERS -> Add A to B's FOLLOWING list
                             b_following = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(follower_person, "").split(",") if f.strip()]
-                            if person not in b_following:
-                                b_following.append(person)
+                            if selected_person not in b_following:
+                                b_following.append(selected_person)
                                 st.session_state[f"following_{active_sc}"][follower_person] = ", ".join(b_following)
 
-                        st.session_state[f"followers_{active_sc}"][person] = ", ".join(existing)
-                        state_mutated = True
+                        st.session_state[f"followers_{active_sc}"][selected_person] = ", ".join(existing)
+                        save_persisted_data()
+                        st.rerun()
 
                 with col_ing:
                     input_following = st.text_area(
-                        "Following (comma-separated):", 
+                        f"{selected_person} is Following (comma/newline separated):", 
                         value=curr_ing_val,
-                        height=100, 
-                        key=f"area_ing_{active_sc}_{person}"
+                        height=220, 
+                        key=f"area_ing_{active_sc}_{selected_person}"
                     )
-                    if st.button("Update Following", key=f"btn_ing_{active_sc}_{person}", use_container_width=True):
-                        # Parse inputs splitting on spaces, newlines, or commas
+                    if st.button("Update Following", key=f"btn_ing_{active_sc}_{selected_person}", use_container_width=True):
                         raw_tokens = input_following.replace("\n", ",").replace(" ", ",").split(",")
                         parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._" for c in t.strip())]
                         
@@ -287,23 +290,18 @@ for index, tab_object in enumerate(tabs):
                         for followed_person in parsed:
                             if followed_person not in st.session_state[f"people_{active_sc}"]:
                                 st.session_state[f"people_{active_sc}"].append(followed_person)
-                            if followed_person not in existing and followed_person != person:
+                            if followed_person not in existing and followed_person != selected_person:
                                 existing.append(followed_person)
                             
                             # INVERSE SYNC: If A is FOLLOWING B -> Add A to B's FOLLOWERS list
                             b_followers = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(followed_person, "").split(",") if f.strip()]
-                            if person not in b_followers:
-                                b_followers.append(person)
+                            if selected_person not in b_followers:
+                                b_followers.append(selected_person)
                                 st.session_state[f"followers_{active_sc}"][followed_person] = ", ".join(b_followers)
 
-                        st.session_state[f"following_{active_sc}"][person] = ", ".join(existing)
-                        state_mutated = True
-                
-                st.markdown("---")
-
-            if state_mutated:
-                save_persisted_data()
-                st.rerun()
+                        st.session_state[f"following_{active_sc}"][selected_person] = ", ".join(existing)
+                        save_persisted_data()
+                        st.rerun()
 
         with col_graph:
             # --- GRAPH CONSTRUCT ENGINE (MUTUAL CONNECTIONS ONLY) ---
@@ -317,15 +315,15 @@ for index, tab_object in enumerate(tabs):
                 ing_list = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(person, "").split(",") if f.strip()]
                 
                 for f in foll_list:
-                    if G_directed.has_node(f): G_directed.add_edge(f, person)  # f follows person
+                    if G_directed.has_node(f): G_directed.add_edge(f, person)
                 for i in ing_list:
-                    if G_directed.has_node(i): G_directed.add_edge(person, i)  # person follows i
+                    if G_directed.has_node(i): G_directed.add_edge(person, i)
 
             # Filter for bi-directional (mutual) edges only
             G_active = nx.Graph()
             G_active.add_nodes_from(G_directed.nodes())
             for u, v in G_directed.edges():
-                if G_directed.has_edge(v, u):  # Mutual reciprocity check
+                if G_directed.has_edge(v, u):
                     G_active.add_edge(u, v)
 
             if len(G_active.nodes()) > 0:
