@@ -258,22 +258,25 @@ for index, tab_object in enumerate(tabs):
                         height=220, 
                         key=foll_key
                     )
+                    
                     if st.button("Update Followers", key=f"btn_foll_{active_sc}_{selected_person}", use_container_width=True):
-                        raw_tokens = input_followers.replace("\n", ",").replace(" ", ",").split(",")
-                        parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._-" for c in t.strip())]
+                        # Robust delimiter parsing (handles newlines, tabs, spaces, commas)
+                        raw_tokens = input_followers.replace("\n", ",").replace("\t", ",").replace(" ", ",").split(",")
                         
                         existing = []
-                        for follower_person in parsed:
-                            if follower_person not in st.session_state[f"people_{active_sc}"]:
-                                st.session_state[f"people_{active_sc}"].append(follower_person)
-                            if follower_person not in existing and follower_person != selected_person:
-                                existing.append(follower_person)
-                            
-                            # SYNC: If B is in A's FOLLOWERS -> Add A to B's FOLLOWING list
-                            b_following = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(follower_person, "").split(",") if f.strip()]
-                            if selected_person not in b_following:
-                                b_following.append(selected_person)
-                                st.session_state[f"following_{active_sc}"][follower_person] = ", ".join(b_following)
+                        for token in raw_tokens:
+                            clean_name = token.strip().lstrip("@")
+                            if clean_name and clean_name != selected_person:
+                                if clean_name not in st.session_state[f"people_{active_sc}"]:
+                                    st.session_state[f"people_{active_sc}"].append(clean_name)
+                                if clean_name not in existing:
+                                    existing.append(clean_name)
+                                
+                                # SYNC: If B is in A's FOLLOWERS -> Add A to B's FOLLOWING list
+                                b_following = [f.strip() for f in st.session_state[f"following_{active_sc}"].get(clean_name, "").split(",") if f.strip()]
+                                if selected_person not in b_following:
+                                    b_following.append(selected_person)
+                                    st.session_state[f"following_{active_sc}"][clean_name] = ", ".join(b_following)
 
                         st.session_state[f"followers_{active_sc}"][selected_person] = ", ".join(existing)
                         save_persisted_data()
@@ -285,22 +288,25 @@ for index, tab_object in enumerate(tabs):
                         height=220, 
                         key=ing_key
                     )
+                    
                     if st.button("Update Following", key=f"btn_ing_{active_sc}_{selected_person}", use_container_width=True):
-                        raw_tokens = input_following.replace("\n", ",").replace(" ", ",").split(",")
-                        parsed = [t.strip().replace("@", "") for t in raw_tokens if t.strip() and all(c.isalnum() or c in "._-" for c in t.strip())]
+                        # Robust delimiter parsing (handles newlines, tabs, spaces, commas)
+                        raw_tokens = input_following.replace("\n", ",").replace("\t", ",").replace(" ", ",").split(",")
                         
                         existing = []
-                        for followed_person in parsed:
-                            if followed_person not in st.session_state[f"people_{active_sc}"]:
-                                st.session_state[f"people_{active_sc}"].append(followed_person)
-                            if followed_person not in existing and followed_person != selected_person:
-                                existing.append(followed_person)
-                            
-                            # INVERSE SYNC: If A is FOLLOWING B -> Add A to B's FOLLOWERS list
-                            b_followers = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(followed_person, "").split(",") if f.strip()]
-                            if selected_person not in b_followers:
-                                b_followers.append(selected_person)
-                                st.session_state[f"followers_{active_sc}"][followed_person] = ", ".join(b_followers)
+                        for token in raw_tokens:
+                            clean_name = token.strip().lstrip("@")
+                            if clean_name and clean_name != selected_person:
+                                if clean_name not in st.session_state[f"people_{active_sc}"]:
+                                    st.session_state[f"people_{active_sc}"].append(clean_name)
+                                if clean_name not in existing:
+                                    existing.append(clean_name)
+                                
+                                # INVERSE SYNC: If A is FOLLOWING B -> Add A to B's FOLLOWERS list
+                                b_followers = [f.strip() for f in st.session_state[f"followers_{active_sc}"].get(clean_name, "").split(",") if f.strip()]
+                                if selected_person not in b_followers:
+                                    b_followers.append(selected_person)
+                                    st.session_state[f"followers_{active_sc}"][clean_name] = ", ".join(b_followers)
 
                         st.session_state[f"following_{active_sc}"][selected_person] = ", ".join(existing)
                         save_persisted_data()
