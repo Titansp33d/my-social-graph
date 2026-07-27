@@ -15,9 +15,9 @@ st.set_page_config(page_title="Multi-Scenario Network Suite", layout="wide")
 st.title("Multi-Scenario Persistent 3D Social Constellation")
 st.markdown("""
 * **Persistence Status:** Active. Changes are automatically serialized to `network_data.json`.
-* **Scalable Profile Manager:** Select individual profiles to edit to support high-node networks (900+ connections).
+* **Scalable Profile Manager:** Select individual profiles to edit to support high-node networks without DOM crashes.
 * **Bi-Directional Auto-Sync:** Updating A's followers updates B's following, and vice versa.
-* **Edge Rule:** Graph renders connections when relationships are mutual (reciprocal follow).
+* **Strict Mutual Edge Filtering:** Non-mutual nodes are filtered out of the graph view to avoid cluttering reciprocal clusters.
 """)
 
 # --- PERSISTENCE UTILITIES (SAVE/LOAD) ---
@@ -92,7 +92,7 @@ color_theme = st.sidebar.selectbox("Color Palette", ["Plasma", "Viridis", "Infer
 node_size_global = st.sidebar.slider("Node Base Radius", min_value=4, max_value=20, value=10, step=1)
 edge_color_global = st.sidebar.color_picker("Link Line Color", value="#888888")
 
-# --- OPTION 2: SYNTHETIC / MOCK DATA GENERATOR ---
+# --- SYNTHETIC / MOCK DATA GENERATOR ---
 st.sidebar.markdown("---")
 enable_generator = st.sidebar.toggle(
     "Enable Synthetic Generator", 
@@ -191,7 +191,7 @@ for index, tab_object in enumerate(tabs):
                 
             st.markdown("---")
             
-            # --- OPTION 4: COLLABORATIVE / SURVEY INTAKE FORM ---
+            # --- SURVEY INTAKE FORM ---
             with st.expander("📋 Community Connection Survey Form", expanded=False):
                 st.markdown("#### Submit Your Network Node")
                 
@@ -231,7 +231,7 @@ for index, tab_object in enumerate(tabs):
 
             st.markdown("---")
 
-            # --- SINGLE PROFILE SELECTOR & EDITOR (PREVENTS WIDGET OVERLOAD) ---
+            # --- SINGLE PROFILE SELECTOR & PERSISTENT WIDGET EDITOR ---
             active_people = sorted(list(st.session_state[f"people_{active_sc}"]))
             
             st.markdown("#### Manage Node Relationships")
@@ -242,17 +242,22 @@ for index, tab_object in enumerate(tabs):
             )
 
             if selected_person:
-                curr_foll_val = st.session_state[f"followers_{active_sc}"].get(selected_person, "")
-                curr_ing_val = st.session_state[f"following_{active_sc}"].get(selected_person, "")
+                # Direct state key synchronization to preserve contents across site reloads
+                foll_key = f"area_foll_{active_sc}_{selected_person}"
+                ing_key = f"area_ing_{active_sc}_{selected_person}"
+
+                if foll_key not in st.session_state:
+                    st.session_state[foll_key] = st.session_state[f"followers_{active_sc}"].get(selected_person, "")
+                if ing_key not in st.session_state:
+                    st.session_state[ing_key] = st.session_state[f"following_{active_sc}"].get(selected_person, "")
 
                 col_foll, col_ing = st.columns(2)
 
                 with col_foll:
                     input_followers = st.text_area(
-                        f"Followers of {selected_person} (comma/newline separated):", 
-                        value=curr_foll_val,
+                        f"Followers of {selected_person}:", 
                         height=220, 
-                        key=f"area_foll_{active_sc}_{selected_person}"
+                        key=foll_key
                     )
                     if st.button("Update Followers", key=f"btn_foll_{active_sc}_{selected_person}", use_container_width=True):
                         raw_tokens = input_followers.replace("\n", ",").replace(" ", ",").split(",")
@@ -277,10 +282,9 @@ for index, tab_object in enumerate(tabs):
 
                 with col_ing:
                     input_following = st.text_area(
-                        f"{selected_person} is Following (comma/newline separated):", 
-                        value=curr_ing_val,
+                        f"{selected_person} is Following:", 
                         height=220, 
-                        key=f"area_ing_{active_sc}_{selected_person}"
+                        key=ing_key
                     )
                     if st.button("Update Following", key=f"btn_ing_{active_sc}_{selected_person}", use_container_width=True):
                         raw_tokens = input_following.replace("\n", ",").replace(" ", ",").split(",")
@@ -304,7 +308,7 @@ for index, tab_object in enumerate(tabs):
                         st.rerun()
 
         with col_graph:
-            # --- GRAPH CONSTRUCT ENGINE (MUTUAL CONNECTIONS ONLY) ---
+            # --- GRAPH CONSTRUCT ENGINE (STRICT MUTUAL CONNECTIONS ONLY) ---
             G_directed = nx.DiGraph()
             for person in st.session_state[f"people_{active_sc}"]: 
                 G_directed.add_node(person)
@@ -319,12 +323,15 @@ for index, tab_object in enumerate(tabs):
                 for i in ing_list:
                     if G_directed.has_node(i): G_directed.add_edge(person, i)
 
-            # Filter for bi-directional (mutual) edges only
-            G_active = nx.Graph()
-            G_active.add_nodes_from(G_directed.nodes())
+            # Filter for bi-directional (mutual) edges
+            G_mutual = nx.Graph()
             for u, v in G_directed.edges():
                 if G_directed.has_edge(v, u):
-                    G_active.add_edge(u, v)
+                    G_mutual.add_edge(u, v)
+
+            # Filter out non-mutual isolated nodes
+            nodes_with_mutuals = [node for node, degree in G_mutual.degree() if degree > 0]
+            G_active = G_mutual.subgraph(nodes_with_mutuals).copy()
 
             if len(G_active.nodes()) > 0:
                 pos_active = nx.fruchterman_reingold_layout(G_active, dim=3, seed=42)
@@ -335,20 +342,23 @@ for index, tab_object in enumerate(tabs):
             shortest_path_nodes = []
             shortest_path_edges = set()
             if active_sc == search_target_sc and path_start_global and path_end_global and path_start_global != path_end_global:
-                try:
-                    shortest_path_nodes = nx.shortest_path(G_active, source=path_start_global, target=path_end_global)
-                    for i in range(len(shortest_path_nodes) - 1):
-                        shortest_path_edges.add((shortest_path_nodes[i], shortest_path_nodes[i+1]))
-                        shortest_path_edges.add((shortest_path_nodes[i+1], shortest_path_nodes[i]))
-                    st.success("Route Found: " + " -> ".join([f"{n}" for n in shortest_path_nodes]))
-                except nx.NetworkXNoPath:
-                    st.error("No path connects these nodes.")
+                if G_active.has_node(path_start_global) and G_active.has_node(path_end_global):
+                    try:
+                        shortest_path_nodes = nx.shortest_path(G_active, source=path_start_global, target=path_end_global)
+                        for i in range(len(shortest_path_nodes) - 1):
+                            shortest_path_edges.add((shortest_path_nodes[i], shortest_path_nodes[i+1]))
+                            shortest_path_edges.add((shortest_path_nodes[i+1], shortest_path_nodes[i]))
+                        st.success("Route Found: " + " -> ".join([f"{n}" for n in shortest_path_nodes]))
+                    except nx.NetworkXNoPath:
+                        st.error("No path connects these nodes in the mutual graph.")
+                else:
+                    st.warning("One or both selected nodes do not have mutual connections in this scenario.")
 
             # Metrics Display
             sm1, sm2, sm3 = st.columns(3)
-            sm1.metric("Total Profile Nodes", len(G_active.nodes()))
+            sm1.metric("Mutual Profiles", len(G_active.nodes()))
             sm2.metric("Mutual Links", len(G_active.edges()))
-            sm3.metric("Isolated Social Islands", nx.number_connected_components(G_active))
+            sm3.metric("Isolated Clusters", nx.number_connected_components(G_active) if len(G_active) > 0 else 0)
 
             # --- PLOTLY 3D GRAPH ASSEMBLY ---
             data_traces = []
